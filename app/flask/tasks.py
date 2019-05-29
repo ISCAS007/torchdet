@@ -54,7 +54,7 @@ def longtask():
     for key in data.keys():
         flag,value=get_data(request,key)
         if not flag:
-            return generate_error(1,'cannot obtain data {}'.format(key))
+            return json.dumps(generate_error(1,'cannot obtain data {}'.format(key)))
         else:
             data[key]=value
 
@@ -63,14 +63,14 @@ def longtask():
     data['pid']=proc.pid
     assert data['pid']>0
     app_config.append(data)
-    return jsonify(generate_error(0,succeed=1,pid=proc.pid))
+    return json.dumps(generate_error(0,succeed=1,pid=proc.pid))
 
 @flask_app.route('/taskresult/<pid>')
 def taskresult(pid):
     try:
         p = psutil.Process(int(pid))
     except Exception as e:
-        return jsonify(generate_error(3,succeed=1,pid=pid,str=e.__str__()))
+        return json.dumps(generate_error(3,succeed=1,pid=pid,str=e.__str__()))
     
     return render_template('result.html',
                             title=pid,
@@ -87,21 +87,21 @@ def stoptask():
     for key in data.keys():
         flag,value=get_data(request,key)
         if not flag:
-            return generate_error(1,'cannot obtain data {}'.format(key))
+            return json.dumps(generate_error(1,'cannot obtain data {}'.format(key)))
         else:
             data[key]=value
 
     pid=get_app_id(data) 
     if pid==-1:
-        return generate_error(2,'no process running for {}/{}'.format(data['video_url'],data['task_name']))
+        return json.dumps(generate_error(2,'no process running for {}/{}'.format(data['video_url'],data['task_name'])))
 
     try:
         p = psutil.Process(pid)
         p.terminal()
     except Exception as e:
-        return jsonify(generate_error(3,succeed=1,pid=pid,str=e.__str__()))
-    return  jsonify(generate_error(0,succeed=1,pid=pid))
+        return json.dumps(generate_error(3,succeed=1,pid=pid,str=e.__str__()))
+    return  json.dumps(generate_error(0,succeed=1,pid=pid))
         
     
 if __name__ == '__main__':
-    flask_app.run(debug=True, host='0.0.0.0', port=5000)
+    flask_app.run(debug=True, host='0.0.0.0', port=5005)

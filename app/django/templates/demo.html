@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<title>{{title}}</title>
+<body>
+
+<p>{{task_name}}</p>
+<p>rtsp://user:password@ip:port</p>
+<form action="/{{task_name}}/" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{input_name}} <input type="text" name="{{input_name}}">
+    <input type="submit" value="提交">
+</form>
+
+</body>
+</html>
