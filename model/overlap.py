@@ -9,6 +9,7 @@ from tqdm import tqdm, trange
 import argparse
 from easydict import EasyDict as edict
 from dataset.det2seg import get_dataset
+from dataset.coco import AspectRatioBasedSampler,collater
 from packaging import version
 import torchvision 
 import numpy as np
@@ -27,6 +28,10 @@ class seg_metric(object):
         return hist
 
     def update(self, label_trues, label_preds,loss):
+        if isinstance(label_trues,torch.Tensor):
+            label_trues=label_trues.data.cpu().numpy()
+        if isinstance(label_preds,torch.Tensor):
+            label_preds=label_preds.data.cpu().numpy()
         for lt, lp in zip(label_trues, label_preds):
             self.confusion_matrix += self._fast_hist(lt.flatten(), lp.flatten(), self.n_classes)
         
@@ -74,12 +79,12 @@ class trainer:
         self.dataset={}
         for split in ['train','val']:
             batch_size=config.batch_size if split=='train' else 1
-            shuffle=True if split=='train' else False
             drop_last=True if split=='train' else False
-            self.dataset[split]=td.DataLoader(dataset=get_dataset(config,split),
-                        batch_size=batch_size,
-                        shuffle=shuffle,
-                        drop_last=drop_last)
+            dataset=get_dataset(config,split)
+            sampler=AspectRatioBasedSampler(dataset, batch_size=batch_size, drop_last=drop_last)
+            self.dataset[split]=td.DataLoader(dataset=dataset,
+                        collate_fn=collater,
+                        batch_sampler=sampler)
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model=self.get_model()
@@ -120,7 +125,9 @@ class trainer:
         
     def init_writer(self,config, log_dir):
         os.makedirs(log_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir=log_dir)
+        writer = SummaryWriter(log_dir)
+            
+        
         config_str = json.dumps(config, indent=2, sort_keys=True).replace(
             '\n', '\n\n').replace('  ', '\t')
         writer.add_text(tag='config', text_string=config_str)
@@ -146,10 +153,10 @@ class trainer:
         for i,(data) in enumerate(tqdm_step):
             if split=='train':
                 self.optimizer.zero_grad()
-            inputs=data['post_img'].to(self.device)
-            label=data['label'].to(self.device)
-            outputs=self.model.forward(inputs)
-            
+            inputs=data['img'].to(self.device)
+            label=data['overlap_map'].to(self.device).long()
+            label=torch.clamp(label,min=0,max=self.num_class-1)
+            outputs=self.model.forward(inputs)['out']
             loss=self.loss_fn(outputs,label)
             
             if split=='train':
@@ -223,7 +230,7 @@ def get_default_config():
     config.batch_size=2
     config.epoch=30
     config.lr=1e-4
-    config.note='smoke'
+    config.note='overlap'
     config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
     config.save_model=False
     return config

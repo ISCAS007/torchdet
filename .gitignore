@@ -2,3 +2,10 @@ data
 output
 __pycache__
 dataset/demo
+.*
+app/db.sqlite3
+dataset/coco
+dataset/smoke
+model/Detectron
+model/pytorch-retinanet
+model/yolov3

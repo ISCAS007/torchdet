@@ -21,7 +21,8 @@ from PIL import Image
 
 def get_transform(split):
     if split=='train':
-        transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()])
+        # transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()])
+        transform=transforms.Compose([Normalizer(), Resizer()])
     else:
         transform=transforms.Compose([Normalizer(), Resizer()])
     
@@ -68,7 +69,7 @@ class CocoDataset(Dataset):
         return len(self.image_ids)
 
     def __getitem__(self, idx):
-
+        assert isinstance(idx,int),'{}:{}'.format(type(idx),idx)
         img = self.load_image(idx)
         annot = self.load_annotations(idx)
         sample = {'img': img, 'annot': annot}
@@ -78,6 +79,7 @@ class CocoDataset(Dataset):
         return sample
 
     def load_image(self, image_index):
+        assert isinstance(image_index,int),'{}:{}'.format(type(image_index),image_index)
         image_info = self.coco.loadImgs(self.image_ids[image_index])[0]
         path       = os.path.join(self.root_dir, 'images', self.set_name, image_info['file_name'])
         img = skimage.io.imread(path)
@@ -312,6 +314,7 @@ def collater(data):
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
     scales = [s['scale'] for s in data]
+    overlap_maps = [s['overlap_map'] for s in data]
         
     widths = [int(s.shape[0]) for s in imgs]
     heights = [int(s.shape[1]) for s in imgs]
@@ -321,10 +324,12 @@ def collater(data):
     max_height = np.array(heights).max()
 
     padded_imgs = torch.zeros(batch_size, max_width, max_height, 3)
+    padded_maps = torch.zeros(batch_size, max_width, max_height)
 
     for i in range(batch_size):
         img = imgs[i]
         padded_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
+        padded_maps[i, :int(img.shape[0]), :int(img.shape[1])] = overlap_maps[i]
 
     max_num_annots = max(annot.shape[0] for annot in annots)
     
@@ -343,7 +348,7 @@ def collater(data):
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
-    return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
+    return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales, 'overlap_map': padded_maps}
 
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""

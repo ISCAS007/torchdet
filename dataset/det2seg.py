@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import torch
 from torch.utils.data import Dataset
 import numpy as np
 import cv2
@@ -25,13 +25,15 @@ class Det2Seg(Dataset):
     """
     convert detection dataset to segmentation format for bbox-free model
     """
-    def __init__(self,dataset):
+    def __init__(self,dataset,transform=None):
         self.dataset=dataset
+        self.transform=transform
         
     def __len__(self):
         return len(self.dataset)
     
     def __getitem__(self,idx):
+        assert isinstance(idx,int),'{}:{}'.format(type(idx),idx)
         #sample = {'img': img, 'annot': annot}
         sample=self.dataset.__getitem__(idx)
         h,w,c=sample['img'].shape
@@ -44,10 +46,21 @@ class Det2Seg(Dataset):
             x1,y1,x2,y2=int(x1),int(y1),int(x2),int(y2)
             if x2>x1 or y2>y1:
                 overlap_map[y1:y2,x1:x2]+=1
-            
-        sample['overlap_map']=overlap_map
+        
         if self.transform:
             sample = self.transform(sample)
+            overlap_map=cv2.resize(overlap_map,dsize=(0,0),
+                                   fx=sample['scale'],
+                                   fy=sample['scale'],
+                                   interpolation=cv2.INTER_NEAREST)
+            pad_h,pad_w,c=sample['img'].shape
+            h,w=overlap_map.shape
+            pad_map=np.zeros((pad_h,pad_w),dtype=np.uint8)
+            pad_map[0:h,0:w]=overlap_map
+            overlap_map=pad_map
+    
+        #overlap_map=np.expand_dims(overlap_map,axis=2)
+        sample['overlap_map']=torch.from_numpy(overlap_map)
         return sample
     
     def vis(self,idx):
@@ -64,3 +77,6 @@ class Det2Seg(Dataset):
                 cv2.rectangle(img, (x1, y1), (x2, y2), color=(0, 0, 255), thickness=2)
                 
         return img,sample['overlap_map']
+    
+    def image_aspect_ratio(self, idx):
+        return self.dataset.image_aspect_ratio(idx)
