@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+bbox-free detection method
+prediction object overlap map to generate bbox
+"""
 import os
 import torch.utils.data as td
 import torch
@@ -37,7 +41,10 @@ class seg_metric(object):
         
         self.loss+=loss
         self.count+=1
-
+    
+    def get_metric(self):
+        return self.get_scores()
+    
     def get_scores(self):
         """Returns accuracy score evaluation result.
             - overall accuracy
