@@ -4,11 +4,14 @@ from torch.utils.data import Dataset
 import numpy as np
 import cv2
 from dataset.coco import CocoDataset,get_transform
+from dataset.PennFudanPed import PennFudanDataset
 
 def get_dataset(config,split):
     if config.dataset_name=='coco2014':
         set_name='train2014' if split=='train' else 'val2014'
         dataset=CocoDataset(config.root_path,set_name=set_name)
+    elif config.dataset_name=='PennFudanPed':
+        dataset=PennFudanDataset(config.root_path,split=split)
     else:
         assert False
     

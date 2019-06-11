@@ -210,7 +210,7 @@ def get_parser():
                         default='fcn_resnet50')
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['coco2014'],
+                        choices=['coco2014','PennFudanPed'],
                         default='coco2014')
     
     parser.add_argument('--epoch',
@@ -244,7 +244,9 @@ def get_default_config():
 
 def finetune_config(config):
     if config.dataset_name=='coco2014':
-        config.root_path=os.path.join('dataset','coco')
+        config.root_path=os.path.expanduser('~/cvdataset/coco')
+    elif config.dataset_name=='PennFudanPed':
+        config.root_path=os.path.expanduser('~/cvdataset/PennFudanPed')
     else:
         assert False
     return config
