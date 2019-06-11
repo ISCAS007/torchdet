@@ -5,7 +5,9 @@ import numpy as np
 import cv2
 from dataset.coco import CocoDataset,get_transform
 from dataset.PennFudanPed import PennFudanDataset
-
+from tqdm import trange
+from easydict import EasyDict as edict
+import os
 def get_dataset(config,split):
     if config.dataset_name=='coco2014':
         set_name='train2014' if split=='train' else 'val2014'
@@ -83,3 +85,20 @@ class Det2Seg(Dataset):
     
     def image_aspect_ratio(self, idx):
         return self.dataset.image_aspect_ratio(idx)
+
+if __name__=='__main__':
+    config=edict()
+    config.dataset_name='PennFudanPed'
+    config.root_path=os.path.expanduser('~/cvdataset/PennFudanPed')
+    
+    for split in ['train','val']:
+        count=[0 for i in range(20)]
+        d=get_dataset(config,split)
+        for i in trange(len(d)):
+            data=d.__getitem__(i)
+            max_idx=np.max(data['overlap_map'].data.cpu().numpy())
+            if max_idx<20:
+                count[max_idx]+=1
+            else:
+                count[-1]+=1
+        print(count)

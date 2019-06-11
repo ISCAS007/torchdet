@@ -66,3 +66,4 @@ class PennFudanDataset(Dataset):
         img_path = os.path.join(self.root, "PNGImages", self.imgs[idx])
         image = Image.open(img_path)
         return float(image.width) / float(image.height)
+

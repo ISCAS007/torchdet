@@ -13,10 +13,12 @@ from tqdm import tqdm, trange
 import argparse
 from easydict import EasyDict as edict
 from dataset.det2seg import get_dataset
-from dataset.coco import AspectRatioBasedSampler,collater
+from dataset.coco import AspectRatioBasedSampler,collater,UnNormalizer
 from packaging import version
 import torchvision 
 import numpy as np
+import glob
+import cv2
 
 class seg_metric(object):
 
@@ -65,11 +67,16 @@ class seg_metric(object):
         fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
         #cls_iu = dict(zip(range(self.n_classes), iu))
         
+        if isinstance(self.loss,torch.Tensor):
+            loss=self.loss.item()/self.count
+        else:
+            loss=self.loss/self.count
+
         return {'acc': acc,
                 'acc_cls': acc_cls,
                 'fwavacc': fwavacc,
                 'miou': mean_iu,
-                'loss':self.loss.item()/self.count}
+                'loss':loss}
 
     def reset(self):
         self.confusion_matrix = np.zeros((self.n_classes, self.n_classes))
@@ -81,6 +88,10 @@ class trainer:
     def __init__(self,config):
         assert version.parse(torchvision.__version__)>=version.parse('0.3.0')
         self.config=config
+        """
+        for coco, max overlap number is 12
+        for PennFudanPed, max overlap number is 3
+        """
         self.num_class=5
         ## set dataset
         self.dataset={}
@@ -97,16 +108,8 @@ class trainer:
         self.model=self.get_model()
         self.model.to(self.device)
         self.loss_fn=torch.nn.CrossEntropyLoss()
-        ## set optimizer
-        optimizer_params = [{'params': [p for p in self.model.parameters() if p.requires_grad]}]
-        self.optimizer=torch.optim.Adam(optimizer_params,lr=config.lr)
         self.metric=seg_metric(self.num_class)
-        time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
-        self.log_dir = os.path.join(config.log_dir, config.model_name,
-                               config.dataset_name, config.note, time_str)
-        
-        self.writer=self.init_writer(config,self.log_dir)
-        
+            
     def get_model(self):
         model_urls = {
             'fcn_resnet50_coco': None,
@@ -184,6 +187,16 @@ class trainer:
         self.train(epoch,split='val')
         
     def train_val(self):
+        ## set optimizer
+        optimizer_params = [{'params': [p for p in self.model.parameters() if p.requires_grad]}]
+        self.optimizer=torch.optim.Adam(optimizer_params,lr=config.lr)
+        
+        time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
+        self.log_dir = os.path.join(config.log_dir, config.model_name,
+                               config.dataset_name, config.note, time_str)
+        
+        self.writer=self.init_writer(config,self.log_dir)
+
         tqdm_epoch = trange(self.config.epoch, desc='epoch', leave=True)
         for epoch in tqdm_epoch:
             self.train(epoch)
@@ -202,12 +215,70 @@ class trainer:
             print('save model to',save_model_path)
             torch.save(self.model,save_model_path)
 
+    def visulization(self):
+        """
+        batch size must be 1 for train and val
+        """
+        model_path=self.config.load_model_path
+        if not os.path.exists(model_path):
+            print('model path',model_path,'not exist')
+            return 0
+        
+        if os.path.isdir(model_path):
+            model_path_list=glob.glob(os.path.join(model_path,'**','*.pt'),recursive=True)
+            if len(model_path_list)==0:
+                print('cannot find weight file in directory',model_path)
+                return 0
+                
+            print(model_path_list)
+            model_path=model_path_list[0]
+            print('auto select model',model_path)
+
+        self.model.load_state_dict(torch.load(model_path).state_dict())
+        self.model.eval()
+
+        img_unnorm=UnNormalizer()
+        with torch.no_grad():
+            for split in ['train','val']:
+                for i,(data) in enumerate(self.dataset[split]):
+                    inputs=data['img'].to(self.device)
+                    label=data['overlap_map'].to(self.device).long()
+                    clamp_label=torch.clamp(label,min=0,max=self.num_class-1)
+                    outputs=self.model.forward(inputs)['out']
+                    loss=self.loss_fn(outputs,clamp_label)
+                    predictions=torch.argmax(outputs,dim=1)
+                    self.metric.reset()
+                    self.metric.update(predictions,clamp_label,loss)
+                    metric_dict=self.metric.get_metric()
+                    
+                    filename=os.path.join('output',split,str(i))
+                    img_tensor=img_unnorm.__call__(data['img'])
+                    save_img=np.transpose(np.squeeze(img_tensor.data.cpu().numpy()),(1,2,0))
+                    save_img=(save_img*225).astype(np.uint8)
+                    save_label=np.squeeze(predictions.data.cpu().numpy())
+                    save_label=(save_label*50).astype(np.uint8)
+                    os.makedirs(os.path.dirname(filename),exist_ok=True)
+                    cv2.imwrite(filename+'.jpg',save_img)
+                    cv2.imwrite(filename+'.png',save_label)
+                    print('step {}: miou={},acc={},loss={}, save to {}'.format(i,metric_dict['miou'],
+                        metric_dict['acc'],metric_dict['loss'],filename))
+                    print('predict label',np.unique(save_label))
+
+                    if i > 10:
+                        break
+
 def get_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--app',
+                        help='train_val/vis',
+                        choices=['train','vis'],
+                        default='train')
+
     parser.add_argument('--model_name',
                         help='model name',
                         choices=['fcn_resnet50','fcn_resnet101'],
                         default='fcn_resnet50')
+
     parser.add_argument('--dataset_name',
                         help='dataset name',
                         choices=['coco2014','PennFudanPed'],
@@ -219,17 +290,21 @@ def get_parser():
                         default=30)
     
     parser.add_argument('--batch_size',
-                        help='batch size',
+                        help='batch size (worked when app=train, be 1 for app=vis)',
                         type=int,
                         default=4)
     
     parser.add_argument('--save_model',
                         help='save the model or not',
                         action='store_true')
+
+    parser.add_argument('--load_model_path',
+                        help='model weight path to visulization')
     return parser
 
 def get_default_config():
     config=edict()
+    config.app='train'
     config.model_name='fcn_resnet50'
     config.dataset_name='coco2014'
     config.root_path=os.path.join('dataset','coco')
@@ -240,6 +315,7 @@ def get_default_config():
     config.note='overlap'
     config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
     config.save_model=False
+    config.load_model_path=None
     return config
 
 def finetune_config(config):
@@ -249,6 +325,9 @@ def finetune_config(config):
         config.root_path=os.path.expanduser('~/cvdataset/PennFudanPed')
     else:
         assert False
+    
+    if config.app=='vis':
+        config.batch_size=1
     return config
     
 if __name__ == '__main__':
@@ -270,5 +349,9 @@ if __name__ == '__main__':
     
     config=finetune_config(config)
     t=trainer(config)
-    t.train_val()
+
+    if config.app=='train':
+        t.train_val()
+    else:
+        t.visulization()
             
