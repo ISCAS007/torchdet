@@ -39,7 +39,7 @@ def get_parser():
     
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['voc2012','cityscpaes','SBD'],
+                        choices=['voc2012','cityscapes','SBD'],
                         default='voc2012')
     
     parser.add_argument('--epoch',
