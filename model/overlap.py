@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 import argparse
 from easydict import EasyDict as edict
 from dataset.det2seg import get_dataset
-from dataset.coco import AspectRatioBasedSampler,collater,UnNormalizer
+from dataset.coco import UnNormalizer
 from packaging import version
 import torchvision 
 import numpy as np
@@ -93,22 +93,26 @@ class trainer:
         for PennFudanPed, max overlap number is 3
         """
         self.num_class=5
-        ## set dataset
-        self.dataset={}
-        for split in ['train','val']:
-            batch_size=config.batch_size if split=='train' else 1
-            drop_last=True if split=='train' else False
-            dataset=get_dataset(config,split)
-            sampler=AspectRatioBasedSampler(dataset, batch_size=batch_size, drop_last=drop_last)
-            self.dataset[split]=td.DataLoader(dataset=dataset,
-                        collate_fn=collater,
-                        batch_sampler=sampler)
+        self.get_dataset()
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model=self.get_model()
         self.model.to(self.device)
         self.loss_fn=torch.nn.CrossEntropyLoss()
         self.metric=seg_metric(self.num_class)
+        time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
+        self.log_dir = os.path.join(self.config.log_dir, self.config.model_name,
+                               self.config.dataset_name, self.config.note, time_str)
+    
+    def get_dataset(self):
+        self.dataset={}
+        for split in ['train','val']:
+            self.dataset[split]=get_dataset(self.config,split)
+    
+    def get_data(self,data):
+        inputs=data['img'].to(self.device)
+        label=data['overlap_map'].to(self.device).long()
+        return inputs,label
             
     def get_model(self):
         model_urls = {
@@ -149,7 +153,7 @@ class trainer:
         config_file.close()
     
         return writer
- 
+     
     def train(self,epoch,split='train'):
         if split=='train':
             self.model.train()
@@ -163,8 +167,7 @@ class trainer:
         for i,(data) in enumerate(tqdm_step):
             if split=='train':
                 self.optimizer.zero_grad()
-            inputs=data['img'].to(self.device)
-            label=data['overlap_map'].to(self.device).long()
+            inputs,label=self.get_data(data)
             label=torch.clamp(label,min=0,max=self.num_class-1)
             outputs=self.model.forward(inputs)['out']
             loss=self.loss_fn(outputs,label)
@@ -189,13 +192,9 @@ class trainer:
     def train_val(self):
         ## set optimizer
         optimizer_params = [{'params': [p for p in self.model.parameters() if p.requires_grad]}]
-        self.optimizer=torch.optim.Adam(optimizer_params,lr=config.lr)
+        self.optimizer=torch.optim.Adam(optimizer_params,lr=self.config.lr)
         
-        time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
-        self.log_dir = os.path.join(config.log_dir, config.model_name,
-                               config.dataset_name, config.note, time_str)
-        
-        self.writer=self.init_writer(config,self.log_dir)
+        self.writer=self.init_writer(self.config,self.log_dir)
 
         tqdm_epoch = trange(self.config.epoch, desc='epoch', leave=True)
         for epoch in tqdm_epoch:
@@ -241,8 +240,7 @@ class trainer:
         with torch.no_grad():
             for split in ['train','val']:
                 for i,(data) in enumerate(self.dataset[split]):
-                    inputs=data['img'].to(self.device)
-                    label=data['overlap_map'].to(self.device).long()
+                    inputs,label=self.get_data(data)
                     clamp_label=torch.clamp(label,min=0,max=self.num_class-1)
                     outputs=self.model.forward(inputs)['out']
                     loss=self.loss_fn(outputs,clamp_label)
@@ -252,7 +250,7 @@ class trainer:
                     metric_dict=self.metric.get_metric()
                     
                     filename=os.path.join('output',split,str(i))
-                    img_tensor=img_unnorm.__call__(data['img'])
+                    img_tensor=img_unnorm.__call__(inputs)
                     save_img=np.transpose(np.squeeze(img_tensor.data.cpu().numpy()),(1,2,0))
                     save_img=(save_img*225).astype(np.uint8)
                     save_label=np.squeeze(predictions.data.cpu().numpy())
@@ -270,7 +268,7 @@ class trainer:
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--app',
-                        help='train_val/vis',
+                        help='train/vis',
                         choices=['train','vis'],
                         default='train')
 
@@ -307,7 +305,6 @@ def get_default_config():
     config.app='train'
     config.model_name='fcn_resnet50'
     config.dataset_name='coco2014'
-    config.root_path=os.path.join('dataset','coco')
     config.img_size=(224,224)
     config.batch_size=2
     config.epoch=30
@@ -349,7 +346,7 @@ if __name__ == '__main__':
     
     config=finetune_config(config)
     t=trainer(config)
-
+    
     if config.app=='train':
         t.train_val()
     else:

@@ -9,6 +9,15 @@ the main funcion
 input: tensor or numpy, BxHxW, label_True.size=label_pred.size
 output: dict
 
--  
-
-
+## segmentation dataset
+- torchvision.datasets.VOCSegmentation
+output PIL.Image, need convert to numpy array
+- dataset information flow
+```
+digraph G{
+{config split} -> dataset
+split -> transform
+{dataset transform} -> seg2boundary
+seg2boundary -> dataloader
+}
+```

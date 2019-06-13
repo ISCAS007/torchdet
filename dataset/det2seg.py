@@ -1,31 +1,44 @@
 # -*- coding: utf-8 -*-
+"""
+convert detection dataset to overlap map segmentation dataset
+"""
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset,DataLoader
 import numpy as np
 import cv2
 from dataset.coco import CocoDataset,get_transform
 from dataset.PennFudanPed import PennFudanDataset
+from dataset.coco import AspectRatioBasedSampler,collater
 from tqdm import trange
 from easydict import EasyDict as edict
 import os
+
 def get_dataset(config,split):
     if config.dataset_name=='coco2014':
         set_name='train2014' if split=='train' else 'val2014'
-        dataset=CocoDataset(config.root_path,set_name=set_name)
+        base_dataset=CocoDataset(config.root_path,set_name=set_name)
     elif config.dataset_name=='PennFudanPed':
-        dataset=PennFudanDataset(config.root_path,split=split)
+        base_dataset=PennFudanDataset(config.root_path,split=split)
     else:
         assert False
     
     transform=get_transform(split)
-    return Det2Seg(dataset,transform)
+    dataset=Det2Seg(base_dataset,transform)
+
+    batch_size=config.batch_size if split=='train' else 1
+    drop_last=True if split=='train' else False
+    sampler=AspectRatioBasedSampler(dataset, batch_size=batch_size, drop_last=drop_last)
+    data_loader=DataLoader(dataset=dataset,
+                collate_fn=collater,
+                batch_sampler=sampler)
+    
+    return data_loader
     
 def draw_caption(image, box, caption):
     b = np.array(box).astype(int)
     cv2.putText(image, caption, (b[0], b[1] - 10), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 2)
     cv2.putText(image, caption, (b[0], b[1] - 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
-    
-    
+
 class Det2Seg(Dataset):
     """
     convert detection dataset to segmentation format for bbox-free model
@@ -54,11 +67,13 @@ class Det2Seg(Dataset):
         
         if self.transform:
             sample = self.transform(sample)
+            pad_h,pad_w,c=sample['img'].shape
+        
             overlap_map=cv2.resize(overlap_map,dsize=(0,0),
                                    fx=sample['scale'],
                                    fy=sample['scale'],
                                    interpolation=cv2.INTER_NEAREST)
-            pad_h,pad_w,c=sample['img'].shape
+            
             h,w=overlap_map.shape
             pad_map=np.zeros((pad_h,pad_w),dtype=np.uint8)
             pad_map[0:h,0:w]=overlap_map
