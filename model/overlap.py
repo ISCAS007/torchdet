@@ -92,7 +92,7 @@ class trainer:
         for coco, max overlap number is 12
         for PennFudanPed, max overlap number is 3
         """
-        self.num_class=5
+        self.num_class=config.num_class
         self.get_dataset()
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -313,6 +313,7 @@ def get_default_config():
     config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
     config.save_model=False
     config.load_model_path=None
+    config.num_class=5
     return config
 
 def finetune_config(config):

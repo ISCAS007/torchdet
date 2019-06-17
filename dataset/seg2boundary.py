@@ -69,16 +69,35 @@ def get_boundary_distance(label_img):
     return boundary
 
 def get_boundary_offset(label_img):
-    #todo
-    pass
+    # 1 for boundary, 0 for background
+    boundary=find_boundaries(label_img,mode='thick').astype(np.uint8)
+    # 0 for boundary, 1 for background
+    cv_boundary=1-boundary
+    # dt: distance transform image (np.float32), dl: distance transform label
+    dt,dl=cv2.distanceTransformWithLabels(cv_boundary,
+                                          distanceType=cv2.DIST_L2,
+                                          maskSize=5,
+                                          labelType=cv2.DIST_LABEL_PIXEL)
+    h_idx,w_idx=np.where(boundary)
+    h,w=label_img.shape[0:2]
+    # allow negtive offset
+    dist_offset=np.zeros((h,w,2),dtype=np.int)
+    for a in range(h):
+        for b in range(w):
+            dist_offset[a,b,0]=h_idx[dl[a,b]-1]-a
+            dist_offset[a,b,1]=w_idx[dl[a,b]-1]-b
+    
+
+    return dt,dist_offset
 
 class Seg2Boundary(Dataset):
     """
     convert segmentation dataset to boundary segmentation dataset
     """
-    def __init__(self,dataset,transform=None):
+    def __init__(self,dataset,transform=None,boundary_type='distance'):
         self.dataset=dataset
         self.transform=transform
+        self.boundary_type=boundary_type
         
     def __len__(self):
         return len(self.dataset)
@@ -86,12 +105,35 @@ class Seg2Boundary(Dataset):
     def __getitem__(self,idx):
         img,label=self.dataset[idx]
         label=np.array(label)
-        boundary=get_boundary_distance(label)
+        if self.boundary_type=='distance':
+            boundary=get_boundary_distance(label)
+        elif self.boundary_type=='offset':
+            dt,dist_offset=get_boundary_offset(label)
+            
+            max_offset=20
+            dist_offset=np.clip(dist_offset,-max_offset,max_offset)
+            fine_offset=(dist_offset+max_offset).astype(np.uint8)
+            boundary=np.zeros_like(fine_offset)
+            for v in range(2*max_offset//5):
+                boundary[fine_offset>5*v]=v
+        else:
+            assert False,'unknown boudnary type {}'.format(self.boundary_type)
         
         if self.transform:
             img,boundary=self.transform(img,Image.fromarray(boundary))
             
         return img,boundary
     
-    
-    
+if __name__ == '__main__':
+    """
+    test for distance tranform
+    """
+    N=7
+    mask=np.random.randint(2,size=(7,7)).astype(np.uint8)
+    dist,dist_offset=get_boundary_offset(mask)
+    print(dist_offset[:,:,0])
+    print(dist_offset[:,:,1])
+    my_dist=np.linalg.norm(dist_offset,ord=2,axis=-1)
+    print(dist)
+    print(my_dist)
+    assert np.any(dist.astype(np.uint8)==my_dist.astype(np.uint8))

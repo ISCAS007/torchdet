@@ -56,6 +56,11 @@ def get_parser():
                         help='save the model or not(default False)',
                         action='store_true')
     
+    parser.add_argument('--boundary_type',
+                        help='use distance or offset to predict boundary',
+                        choices=['distance','offset'],
+                        default='distance')
+    
     parser.add_argument('--load_model_path',
                         help='model weight path')
     
@@ -74,6 +79,8 @@ def get_default_config():
     config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
     config.save_model=False
     config.load_model_path=None
+    config.boundary_type='distance'
+    config.num_class=5
     return config
 
 def finetune_config(config):
@@ -86,6 +93,13 @@ def finetune_config(config):
     else:
         assert False
     
+    if config.boundary_type=='distance':
+        config.num_class=5
+    elif config.boundary_type=='offset':
+        config.num_class=8
+    else:
+            assert False
+            
     if config.app=='vis':
         config.batch_size=1
     return config
