@@ -21,3 +21,10 @@ split -> transform
 seg2boundary -> dataloader
 }
 ```
+- image format flow
+```
+digraph G{
+dataset -> transform [label="PIL.Image-->tensor list"]
+transform -> dataloader [label="tensor list-->batch tensor"] 
+}
+```
