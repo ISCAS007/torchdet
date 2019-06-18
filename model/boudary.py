@@ -5,6 +5,9 @@ import argparse
 from easydict import EasyDict as edict
 from model.overlap import trainer
 from dataset.seg2boundary import get_dataset
+import yaml
+import glob
+import warnings
 
 class boundary_trainer(trainer):
     def __init__(self,config):
@@ -64,6 +67,9 @@ def get_parser():
     parser.add_argument('--load_model_path',
                         help='model weight path')
     
+    parser.add_argument('--note',
+                        default='boundary')
+    
     return parser
 
 def get_default_config():
@@ -81,6 +87,44 @@ def get_default_config():
     config.load_model_path=None
     config.boundary_type='distance'
     config.num_class=5
+    return config
+
+def load_config(config_path_or_file):
+    """
+    config_path_or_file format:
+        1. None, load default config
+        2. xxx/xxx/xxx.config.txt, load config.txt and merge with default config
+        3. xxx/xxx/weight_file, load config.txt and merge with default config
+        4. xxx/xxx/ load config.txt and merge with default config
+    """
+    if config_path_or_file is None:
+        return get_default_config()
+    elif config_path_or_file.endswith("config.txt"):
+        config_file=config_path_or_file
+    elif os.path.isdir(config_path_or_file):
+        files=glob.glob(os.path.join(config_path_or_file,'**','config.txt'),recursive=True)
+        if len(files)==0:
+            warnings.warn('no config.txt found on directory {}'.format(config_path_or_file))
+            return get_default_config()
+        else:
+            config_file=files[0]
+    elif os.path.isfile(config_path_or_file):
+        config_file=os.path.join(os.path.dirname(config_path_or_file),'config.txt')
+    else:
+        assert False,'unknwon config path format'
+
+    f=open(config_file,'r')
+    l=f.readline()
+    f.close()
+
+    d=yaml.load(l,Loader=yaml.FullLoader)
+    config=edict(d)
+    
+    default_cfg=get_default_config()
+    for key in default_cfg.keys():
+        if key not in config.keys():
+            config[key]=default_cfg[key]
+    
     return config
 
 def finetune_config(config):
@@ -108,7 +152,7 @@ if __name__ == '__main__':
     parser=get_parser()
     args = parser.parse_args()
     
-    config=get_default_config()
+    config=load_config(args.load_model_path)
     sort_keys=sorted(list(config.keys()))
     for key in sort_keys:
         if hasattr(args,key):
