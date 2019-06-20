@@ -6,7 +6,7 @@
 
 ![](dataset/vis/split_image.png)
 
-## reference
+## detection reference
 - https://github.com/eriklindernoren/PyTorch-YOLOv3
 - https://github.com/ultralytics/yolov3
 ```
@@ -28,6 +28,10 @@ python tools/infer_simple.py \
 # output image in /tmp/detectron-visualizations
 ```
 - https://github.com/yhenon/pytorch-retinanet
+- https://github.com/open-mmlab/mmdetection
+
+## segmentation reference
+- https://github.com/lingtengqiu/Deeperlab-pytorch
 
 ## dataset
 
@@ -38,3 +42,9 @@ python tools/infer_simple.py \
 | ILSVRC | 517k | 534k | 200 |
 | MS-COCO 17 | 164k | 897k | 80 |
 | OID-2018 | 1910k | 15440k | 600 |
+
+## requirement
+- model/smoke/smoke_cls.py
+- model/boundary.py
+- model/overlap.py
+

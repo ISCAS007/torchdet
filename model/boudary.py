@@ -153,21 +153,25 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     config=load_config(args.load_model_path)
-    sort_keys=sorted(list(config.keys()))
-    for key in sort_keys:
-        if hasattr(args,key):
-            print('{} = {} (default: {})'.format(key,args.__dict__[key],config[key]))
-            config[key]=args.__dict__[key]
-        else:
-            print('{} : (default:{})'.format(key,config[key]))
-    
-    for key in args.__dict__.keys():
-        if key not in config.keys():
-            print('{} : unused keys {}'.format(key,args.__dict__[key]))
-    
+    if args.app=='train':
+        sort_keys=sorted(list(config.keys()))
+        for key in sort_keys:
+            if hasattr(args,key):
+                print('{} = {} (default: {})'.format(key,args.__dict__[key],config[key]))
+                config[key]=args.__dict__[key]
+            else:
+                print('{} : (default:{})'.format(key,config[key]))
+        
+        for key in args.__dict__.keys():
+            if key not in config.keys():
+                print('{} : unused keys {}'.format(key,args.__dict__[key]))
+    else:
+        config.app=args.app
+        config.load_model_path=args.load_model_path
+        
     config=finetune_config(config)
     t=boundary_trainer(config)
-    if config.app=='train':
+    if args.app=='train':
         t.train_val()
     else:
         t.visulization()

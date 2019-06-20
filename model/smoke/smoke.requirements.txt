@@ -2,4 +2,7 @@ tqdm==4.31.1
 numpy==1.16.3
 easydict==1.7
 opencv_python==4.1.0.25
-torch==0.4.1.post2
+torch==1.1.0
+scikit_learn==0.21.2
+tensorboardX==1.7
+PyYAML==5.1.1

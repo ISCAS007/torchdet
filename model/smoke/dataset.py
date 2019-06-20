@@ -42,7 +42,18 @@ class video2img(github_cair):
         
         self.names=['normal','fire_or_smoke']
         
+def simple_preprocess(image,img_size):
+    # Padded resize
+    img=cv2.resize(image,tuple(img_size),interpolation=cv2.INTER_LINEAR)
+
+    # Normalize RGB
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, HWC to CHW
+    img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+    
+    return img
         
+    
 class cls_dataset(td.Dataset):
     def __init__(self,config,split='train'):
         super().__init__()
@@ -103,12 +114,4 @@ class cls_dataset(td.Dataset):
         return new_data
 
     def preprocess(self,pre_img):
-        # Padded resize
-        img=cv2.resize(pre_img,tuple(self.img_size),interpolation=cv2.INTER_LINEAR)
-
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
-        img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-        
-        return img
+        return simple_preprocess(pre_img,self.img_size)
