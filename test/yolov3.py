@@ -135,16 +135,18 @@ def detect(
                     label = '%s %.2f' % (classes[int(cls)], conf)
                     plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
 
+                print('merget_det',merged_det)
                 plt.imshow(draw_origin_img)
                 plt.show()
-
+        if i>3:
+            break
+        continue
         draw_imgs=[]
         for resize_img,split_img in zip(resize_imgs,split_imgs):
             # Get detections
             img = torch.from_numpy(resize_img).unsqueeze(0).to(device)
             pred, _ = model(img)
             det = non_max_suppression(pred, conf_thres, nms_thres)[0]
-            print(det,type(det))
             if det is not None:
                 print(det.shape)
 
