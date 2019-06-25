@@ -50,8 +50,8 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                     # Rescale boxes from target size to slide window size
                     y_h_scale=shape[0]/target_size[0]
                     x_w_scale=shape[1]/target_size[1]
-                    det[:,[0,2]] =(det[:,[0,2]]*y_h_scale).round()
-                    det[:,[1,3]]=(det[:,[1,3]]*x_w_scale).round()
+                    det[:,[0,2]] =(det[:,[0,2]]*x_w_scale).round()
+                    det[:,[1,3]]=(det[:,[1,3]]*y_h_scale).round()
                     det[:,0:4]=det[:,0:4].clamp(min=0)
                 det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
 
@@ -197,7 +197,7 @@ def detect(
         filename='merge_img'+str(int(time.time()))+'.jpg'
         cv2.imwrite(filename,draw_img)
 
-        if i > 3:
+        if i > 1:
             break
         
         if load_video:  # Show live webcam
