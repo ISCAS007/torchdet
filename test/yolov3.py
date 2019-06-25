@@ -10,6 +10,52 @@ from model.yolov3.utils.utils import *
 from util.split_image import split_image,merge_image,yolov3_loadImages,yolov3_loadVideos
 import numpy as np
 import torch
+
+def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
+    """
+    use slide window technology
+    bboxes: small image's detection results
+    target_size: small image normed size
+    origin_size: full image size
+    """
+    if isinstance(target_size,int):
+        target_size=(target_size,target_size)
+        
+    h,w,c=origin_size
+    th=target_size[0]//2
+    tw=target_size[1]//2
+    h_num=int(np.floor(h/th))-1
+    w_num=int(np.floor(w/tw))-1
+
+    merged_bbox=[]
+    for i in range(h_num):
+        for j in range(w_num):
+            if i==h_num-1:
+                h_end=h
+            else:
+                h_end=i*th+2*th
+            
+            if j==w_num-1:
+                w_end=w
+            else:
+                w_end=j*tw+2*tw
+            
+            idx=i*w_num+j
+            # image size in slide window technology >= target_size
+            shape=(h_end-i*th,w_end-j*tw)
+            offset=(th*i,tw*j)
+            for det in bboxes[idx]:
+                if target_size!=shape:
+                    # Rescale boxes from target size to slide window size
+                    det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
+                
+                det[:,:4]+=torch.tensor(offset[1],offset[0],offset[1],offset[0])
+
+                merged_bbox.append(det)
+    merged_bbox=torch.cat(merged_bbox,dim=0)
+    nms_merged_bbox = non_max_suppression([merged_bbox], conf_thres, nms_thres)[0]
+    return merged_bbox
+
 def detect(
         cfg,
         data_cfg,
@@ -73,10 +119,22 @@ def detect(
         assert save_path!=path
         
         #batch process
-        batch_imgs=torch.stack([torch.from_numpy(img) for img in resize_imgs]).to(device)
-        batch_pred,_=model(batch_imgs)
-        batch_det=non_max_suppression(pred, conf_thres, nms_thres)
-        print('batch_det',type(batch_det))
+        if len(resize_imgs)>0:
+            batch_imgs=torch.stack([torch.from_numpy(img) for img in resize_imgs]).to(device)
+            batch_pred,_=model(batch_imgs)
+            #batch_det is a detection result list for img in batch_imgs
+            batch_det=non_max_suppression(batch_pred, conf_thres, nms_thres)
+
+            merged_det=merge_bbox(batch_det,img_size,origin_img.shape[:2],conf_thres,nms_thres)
+            draw_origin_img=origin_img.copy()
+            # Draw bounding boxes and labels of detections
+            for *xyxy, conf, cls_conf, cls in merged_det:
+                # Add bbox to the image
+                label = '%s %.2f' % (classes[int(cls)], conf)
+                plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
+
+            plt.imshow(draw_origin_img)
+            plt.show()
 
         draw_imgs=[]
         for resize_img,split_img in zip(resize_imgs,split_imgs):
