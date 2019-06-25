@@ -12,6 +12,78 @@ import numpy as np
 import torch
 import pickle
 
+def my_nms(pred,nms_thres=0.5):
+    """
+    do the second time nms for slide windows results
+    input format: tensor [x1,y1,x2,y2] 
+    """
+    # Get detections sorted by decreasing confidence scores
+    pred = pred[(-pred[:, 4]).argsort()]
+
+    det_max = []
+    nms_style = 'MERGE'  # 'OR' (default), 'AND', 'MERGE' (experimental)
+    for c in pred[:, -1].unique():
+        dc = pred[pred[:, -1] == c]  # select class c
+        n = len(dc)
+        if n == 1:
+            det_max.append(dc)  # No NMS required if only 1 prediction
+            continue
+        elif n > 100:
+            dc = dc[:100]  # limit to first 100 boxes: https://github.com/ultralytics/yolov3/issues/117
+
+        # Non-maximum suppression
+        if nms_style == 'OR':  # default
+            # METHOD1
+            # ind = list(range(len(dc)))
+            # while len(ind):
+            # j = ind[0]
+            # det_max.append(dc[j:j + 1])  # save highest conf detection
+            # reject = (bbox_iou(dc[j], dc[ind]) > nms_thres).nonzero()
+            # [ind.pop(i) for i in reversed(reject)]
+
+            # METHOD2
+            while dc.shape[0]:
+                det_max.append(dc[:1])  # save highest conf detection
+                if len(dc) == 1:  # Stop if we're at the last detection
+                    break
+                iou = bbox_iou(dc[0], dc[1:])  # iou with other boxes
+                dc = dc[1:][iou < nms_thres]  # remove ious > threshold
+
+        elif nms_style == 'AND':  # requires overlap, single boxes erased
+            while len(dc) > 1:
+                iou = bbox_iou(dc[0], dc[1:])  # iou with other boxes
+                if iou.max() > 0.5:
+                    det_max.append(dc[:1])
+                dc = dc[1:][iou < nms_thres]  # remove ious > threshold
+
+        elif nms_style == 'MERGE':  # weighted mixture box
+            while len(dc):
+                if len(dc) == 1:
+                    det_max.append(dc)
+                    break
+                i = bbox_iou(dc[0], dc) > nms_thres  # iou with other boxes
+                weights = dc[i, 4:5]
+                dc[0, :4] = (weights * dc[i, :4]).sum(0) / weights.sum()
+                det_max.append(dc[:1])
+                dc = dc[i == 0]
+
+        elif nms_style == 'SOFT':  # soft-NMS https://arxiv.org/abs/1704.04503
+            sigma = 0.5  # soft-nms sigma parameter
+            while len(dc):
+                if len(dc) == 1:
+                    det_max.append(dc)
+                    break
+                det_max.append(dc[:1])
+                iou = bbox_iou(dc[0], dc[1:])  # iou with other boxes
+                dc = dc[1:]
+                dc[:, 4] *= torch.exp(-iou ** 2 / sigma)  # decay confidences
+
+    if len(det_max):
+        det_max = torch.cat(det_max)  # concatenate
+        output = det_max[(-det_max[:, 4]).argsort()]  # sort
+
+    return output
+
 def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
     """
     use slide window technology
@@ -59,22 +131,13 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                 merged_bbox.append(det)
                     
     merged_bbox=torch.cat(merged_bbox,dim=0)
-    nms_merged_bbox=torch.zeros_like(merged_bbox)
-    nms_merged_bbox[:,0]=(merged_bbox[:,0]+merged_bbox[:,2])/2
-    nms_merged_bbox[:,1]=(merged_bbox[:,1]+merged_bbox[:,3])/2
-    nms_merged_bbox[:,2]=(merged_bbox[:,2]-merged_bbox[:,0])
-    nms_merged_bbox[:,3]=(merged_bbox[:,3]-merged_bbox[:,1])
-    nms_merged_bbox[:,4:]=merge_bbox[:,4:]
-    # nms input format [center x,center y,w,h]
-    # nms output format [x1,y1,x2,y2]
-    out_nms_merged_bbox = non_max_suppression([nms_merged_bbox], conf_thres, nms_thres)[0]
+    out_nms_merged_bbox = my_nms(merged_bbox, nms_thres)
 
     data={
         'bboxes':bboxes,
         'target_size':target_size,
         'origin_size':origin_size,
         'merged_bbox':merged_bbox,
-        'nms_merged_bbox':nms_merged_bbox,
         'out_nms_merged_bbox':out_nms_merged_bbox,
     }
     with open('data.pkl','wb') as f:
