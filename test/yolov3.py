@@ -59,8 +59,8 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                 merged_bbox.append(det)
                     
     merged_bbox=torch.cat(merged_bbox,dim=0)
-    merged_bbox[:,2]-=merged_bbox[:,0]
-    merged_bbox[:,3]-=merged_bbox[:,1]
+    merged_bbox[:,2]=(merged_bbox[:,0]+merged_bbox[:,2])/2
+    merged_bbox[:,3]=(merged_bbox[:,1]+merge_bbox[:,3])/2
     # nms input format [x,y,w,h]
     # nms output format [x1,y1,x2,y2]
     print(merged_bbox)
