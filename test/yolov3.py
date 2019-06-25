@@ -50,7 +50,11 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                         # Rescale boxes from target size to slide window size
                         det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
                     
-                    det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]])
+                    if det.dim()==2:
+                        print('detection result dim is 2')
+                        det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]])
+                    else:
+                        def[:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]])
 
                     merged_bbox.append(det)
     merged_bbox=torch.cat(merged_bbox,dim=0)
