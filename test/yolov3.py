@@ -48,14 +48,21 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                 det=bboxes[idx]
                 if target_size!=shape:
                     # Rescale boxes from target size to slide window size
-                    det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
+                    y_h_scale=shape[0]/target_size[0]
+                    x_w_scale=shape[1]/target_size[1]
+                    det[:,[0,2]] = det[:,[0,2]]*y_h_scale.round()
+                    det[:,[1,3]]=det[:,[1,3]]*x_w_scale.round()
                 det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
 
                 merged_bbox.append(det)
                     
     merged_bbox=torch.cat(merged_bbox,dim=0)
+    merged_bbox[:,2]-=merged_bbox[:,0]
+    merged_bbox[:,3]-=merged_bbox[:,1]
+    # nms input format [x,y,w,h]
+    # nms output format [x1,y1,x2,y2]
     nms_merged_bbox = non_max_suppression([merged_bbox], conf_thres, nms_thres)[0]
-    return merged_bbox
+    return nms_merged_bbox
 
 def detect(
         cfg,
@@ -136,10 +143,8 @@ def detect(
                     plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
 
                 print('merget_det',merged_det.shape)
-                filename=str(int(time.time()))+'.jpg'
+                filename=str(int(100*time.time()))+'.jpg'
                 cv2.imwrite(filename,draw_origin_img)
-                plt.imshow(draw_origin_img)
-                plt.show()
         if i>3:
             break
         continue
