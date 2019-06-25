@@ -21,7 +21,7 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
     if isinstance(target_size,int):
         target_size=(target_size,target_size)
         
-    h,w,c=origin_size
+    h,w=origin_size[0:2]
     th=target_size[0]//2
     tw=target_size[1]//2
     h_num=int(np.floor(h/th))-1
