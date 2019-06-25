@@ -9,6 +9,7 @@ from model.yolov3.utils.datasets import *
 from model.yolov3.utils.utils import *
 from util.split_image import split_image,merge_image,yolov3_loadImages,yolov3_loadVideos
 import numpy as np
+import torch
 def detect(
         cfg,
         data_cfg,
@@ -71,12 +72,37 @@ def detect(
         
         assert save_path!=path
         
+        #batch process
+        batch_imgs=torch.stack([torch.from_numpy(img) for img in resize_imgs]).to(device)
+        batch_pred,_=model(batch_imgs)
+        batch_det=non_max_suppression(pred, conf_thres, nms_thres)
+        print('batch_det',type(batch_det))
+
         draw_imgs=[]
         for resize_img,split_img in zip(resize_imgs,split_imgs):
             # Get detections
             img = torch.from_numpy(resize_img).unsqueeze(0).to(device)
             pred, _ = model(img)
             det = non_max_suppression(pred, conf_thres, nms_thres)[0]
+            print(det,type(det))
+            if det is not None:
+                print(det.shape)
+
+            if det is not None:
+                det_idx=[]
+                for c in det[:,-1]:
+                    if classes[int(c)] not in ['car','person','bicycle','motorbike','truck']:
+                        print('filter out',classes[int(c)])
+                        det_idx.append(0)
+                    else:
+                        det_idx.append(1)
+                if np.any(det_idx):
+                    det=det[torch.from_numpy(np.array(det_idx)).to(device).eq(1),:]
+                else:
+                    det=None
+                print('after filter',det,type(det))
+            if i>3:
+                assert False
 
             if det is not None and len(det) > 0:
                 # Rescale boxes from 416 to true image size
@@ -136,11 +162,12 @@ def detect(
 
 
 if __name__ == '__main__':
+    cfg_path='model/yolov3/yzbx'
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data-cfg', type=str, default='data/coco.data', help='coco.data file path')
-    parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
-    parser.add_argument('--input_folder', type=str, default='data/samples', help='path to input_folder')
+    parser.add_argument('--cfg', type=str, default=os.path.join(cfg_path,'yolov3-spp.cfg'), help='cfg file path')
+    parser.add_argument('--data-cfg', type=str, default=os.path.join(cfg_path,'coco.data'), help='coco.data file path')
+    parser.add_argument('--weights', type=str, default=os.path.join(cfg_path,'yolov3-spp.weights'), help='path to weights file')
+    parser.add_argument('--input_folder', type=str, default='dataset/demo/crossroad', help='path to input_folder')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
