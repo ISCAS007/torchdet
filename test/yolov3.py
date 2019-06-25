@@ -10,6 +10,7 @@ from model.yolov3.utils.utils import *
 from util.split_image import split_image,merge_image,yolov3_loadImages,yolov3_loadVideos
 import numpy as np
 import torch
+import pickle
 
 def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
     """
@@ -62,7 +63,19 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
     merged_bbox[:,3]-=merged_bbox[:,1]
     # nms input format [x,y,w,h]
     # nms output format [x1,y1,x2,y2]
+    print(merged_bbox)
     nms_merged_bbox = non_max_suppression([merged_bbox], conf_thres, nms_thres)[0]
+    print(nms_merged_bbox)
+
+    data={
+        'bboxes':bboxes,
+        'target_size':target_size,
+        'origin_size':origin_size,
+        'merged_bbox':merged_bbox,
+        'nms_merged_bbox':nms_merged_bbox,
+    }
+    with open('data.pkl','wb') as f:
+        pickle.dump(data,f)
     return nms_merged_bbox
 
 def filter_label(det,classes,device):
@@ -197,7 +210,7 @@ def detect(
         filename='merge_img'+str(int(time.time()))+'.jpg'
         cv2.imwrite(filename,draw_img)
 
-        if i > 1:
+        if i >= 0:
             break
         
         if load_video:  # Show live webcam
