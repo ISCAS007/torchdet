@@ -50,8 +50,9 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                     # Rescale boxes from target size to slide window size
                     y_h_scale=shape[0]/target_size[0]
                     x_w_scale=shape[1]/target_size[1]
-                    det[:,[0,2]] = det[:,[0,2]]*y_h_scale.round()
-                    det[:,[1,3]]=det[:,[1,3]]*x_w_scale.round()
+                    det[:,[0,2]] =(det[:,[0,2]]*y_h_scale).round()
+                    det[:,[1,3]]=(det[:,[1,3]]*x_w_scale).round()
+                    det[:,0:4]=det[:,0:4].clamp(min=0)
                 det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
 
                 merged_bbox.append(det)
@@ -63,6 +64,21 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
     # nms output format [x1,y1,x2,y2]
     nms_merged_bbox = non_max_suppression([merged_bbox], conf_thres, nms_thres)[0]
     return nms_merged_bbox
+
+def filter_label(det,classes,device):
+    if det is not None:
+        det_idx=[]
+        for c in det[:,-1]:
+            if classes[int(c)] not in ['car','person','bicycle','motorbike','truck']:
+                print('filter out',classes[int(c)])
+                det_idx.append(0)
+            else:
+                det_idx.append(1)
+        if np.any(det_idx):
+            det=det[torch.from_numpy(np.array(det_idx)).to(device).eq(1),:]
+        else:
+            det=None
+
 
 def detect(
         cfg,
@@ -143,35 +159,17 @@ def detect(
                     plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
 
                 print('merget_det',merged_det.shape)
-                filename=str(int(100*time.time()))+'.jpg'
+                filename='merge_bbox'+str(int(time.time()))+'.jpg'
                 cv2.imwrite(filename,draw_origin_img)
-        if i>3:
-            break
-        continue
+
         draw_imgs=[]
         for resize_img,split_img in zip(resize_imgs,split_imgs):
             # Get detections
             img = torch.from_numpy(resize_img).unsqueeze(0).to(device)
             pred, _ = model(img)
             det = non_max_suppression(pred, conf_thres, nms_thres)[0]
-            if det is not None:
-                print(det.shape)
 
-            if det is not None:
-                det_idx=[]
-                for c in det[:,-1]:
-                    if classes[int(c)] not in ['car','person','bicycle','motorbike','truck']:
-                        print('filter out',classes[int(c)])
-                        det_idx.append(0)
-                    else:
-                        det_idx.append(1)
-                if np.any(det_idx):
-                    det=det[torch.from_numpy(np.array(det_idx)).to(device).eq(1),:]
-                else:
-                    det=None
-                print('after filter',det,type(det))
-            if i>3:
-                assert False
+            #filter_label(det,classes,device)
 
             if det is not None and len(det) > 0:
                 # Rescale boxes from 416 to true image size
@@ -196,7 +194,12 @@ def detect(
             draw_imgs.append(split_img)
         draw_img=merge_image(draw_imgs,img_size,origin_img.shape)
         print('Done. (%.3fs)' % (time.time() - t))
+        filename='merge_img'+str(int(time.time()))+'.jpg'
+        cv2.imwrite(filename,draw_img)
 
+        if i > 3:
+            break
+        
         if load_video:  # Show live webcam
             if save_result:
                 if current_video_path==save_path:
