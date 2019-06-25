@@ -135,7 +135,9 @@ def detect(
                     label = '%s %.2f' % (classes[int(cls)], conf)
                     plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
 
-                print('merget_det',merged_det)
+                print('merget_det',merged_det.shape)
+                filename=str(int(time.time()))+'.jpg'
+                cv2.imwrite(filename,draw_origin_img)
                 plt.imshow(draw_origin_img)
                 plt.show()
         if i>3:
