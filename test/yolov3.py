@@ -48,7 +48,10 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                 for det in bboxes[idx]:
                     if target_size!=shape:
                         # Rescale boxes from target size to slide window size
-                        det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
+                        if det.dim()==2:
+                            det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
+                        else:
+                            det[:4] = scale_coords(target_size, det[:4], shape).round()
                     
                     if det.dim()==2:
                         print('detection result dim is 2')
