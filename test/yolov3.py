@@ -45,21 +45,14 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
             shape=(h_end-i*th,w_end-j*tw)
             offset=(th*i,tw*j)
             if bboxes[idx] is not None:
-                for det in bboxes[idx]:
-                    if target_size!=shape:
-                        # Rescale boxes from target size to slide window size
-                        if det.dim()==2:
-                            det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
-                        else:
-                            det[:4] = scale_coords(target_size, det[:4], shape).round()
-                    
-                    if det.dim()==2:
-                        print('detection result dim is 2')
-                        det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
-                    else:
-                        det[:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
+                det=bboxes[idx]
+                if target_size!=shape:
+                    # Rescale boxes from target size to slide window size
+                    det[:, :4] = scale_coords(target_size, det[:, :4], shape).round()
+                det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
 
-                    merged_bbox.append(det)
+                merged_bbox.append(det)
+                    
     merged_bbox=torch.cat(merged_bbox,dim=0)
     nms_merged_bbox = non_max_suppression([merged_bbox], conf_thres, nms_thres)[0]
     return merged_bbox
