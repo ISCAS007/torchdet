@@ -52,9 +52,9 @@ def merge_bbox(bboxes,target_size,origin_size,conf_thres=0.5,nms_thres=0.5):
                     
                     if det.dim()==2:
                         print('detection result dim is 2')
-                        det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]])
+                        det[:,:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
                     else:
-                        def[:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]])
+                        det[:4]+=torch.tensor([offset[1],offset[0],offset[1],offset[0]]).to(det)
 
                     merged_bbox.append(det)
     merged_bbox=torch.cat(merged_bbox,dim=0)
