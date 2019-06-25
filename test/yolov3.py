@@ -125,16 +125,17 @@ def detect(
             #batch_det is a detection result list for img in batch_imgs
             batch_det=non_max_suppression(batch_pred, conf_thres, nms_thres)
 
-            merged_det=merge_bbox(batch_det,img_size,origin_img.shape[:2],conf_thres,nms_thres)
-            draw_origin_img=origin_img.copy()
-            # Draw bounding boxes and labels of detections
-            for *xyxy, conf, cls_conf, cls in merged_det:
-                # Add bbox to the image
-                label = '%s %.2f' % (classes[int(cls)], conf)
-                plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
+            if batch_det is not None:
+                merged_det=merge_bbox(batch_det,img_size,origin_img.shape[:2],conf_thres,nms_thres)
+                draw_origin_img=origin_img.copy()
+                # Draw bounding boxes and labels of detections
+                for *xyxy, conf, cls_conf, cls in merged_det:
+                    # Add bbox to the image
+                    label = '%s %.2f' % (classes[int(cls)], conf)
+                    plot_one_box(xyxy, draw_origin_img, label=label, color=colors[int(cls)])
 
-            plt.imshow(draw_origin_img)
-            plt.show()
+                plt.imshow(draw_origin_img)
+                plt.show()
 
         draw_imgs=[]
         for resize_img,split_img in zip(resize_imgs,split_imgs):
