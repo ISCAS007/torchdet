@@ -9,22 +9,11 @@ the main funcion
 input: tensor or numpy, BxHxW, label_True.size=label_pred.size
 output: dict
 
-## segmentation dataset
-- torchvision.datasets.VOCSegmentation
-output PIL.Image, need convert to numpy array
-- dataset information flow
-```
-digraph G{
-{config split} -> dataset
-split -> transform
-{dataset transform} -> seg2boundary
-seg2boundary -> dataloader
-}
-```
-- image format flow
-```
-digraph G{
-dataset -> transform [label="PIL.Image-->tensor list"]
-transform -> dataloader [label="tensor list-->batch tensor"] 
-}
-```
+- class trainer
+input: config, edict
+output: -
+
+- load dataset
+config.root_path --> coco/PennFudanDataset --> Det2Seg --> DataLoader --> trainer --> train_val --> train
+
+
