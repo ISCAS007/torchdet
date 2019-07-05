@@ -8,6 +8,8 @@ import os
 import glob
 import shutil
 import cv2
+import argparse
+from datetime import datetime
 import xml.etree.ElementTree as ET
 from jinja2 import Environment, FileSystemLoader
 from easydict import EasyDict as edict
@@ -41,11 +43,14 @@ class darknet_pipeline():
         in_path=raw_dir
         out_path=self.images_dir
         
-        img_files=glob.glob(os.path.join(in_path,'*.jpg'))
-        xml_files=glob.glob(os.path.join(in_path,'*.xml'))
-
-        img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
-
+        files=glob.glob(os.path.join(in_path,'*','*.*'),recursive=True)
+        suffix=('jpg','jpeg','bmp','png')
+        img_files=[f for f in files if f.lower().endswith(suffix)]
+#         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
+#         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
+        
+        # name image with {:06d}.jpg
+        assert len(img_files)<999999
         idx=0
         for img_f in img_files:
             xml_f=img_f.replace('jpg','xml')
@@ -148,16 +153,28 @@ class darknet_pipeline():
         
         print("run the follow code to train\n")
         print("cd {}".format(self.train_dir))
-        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave && mv weights/latest.py weights/{note}.pt".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
+        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave && mv weights/latest.pt weights/{note}.pt".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
     
 if __name__ == '__main__':
-    cfg=edict()
-    cfg.class_names=['excavator']
-    cfg.images_dir='/media/sdb/ISCAS_Dataset/QingDao/digger_yolov3'
-    cfg.save_cfg_dir='yzbx'
-    cfg.train_dir='/home/yzbx/git/torchdet/model/yolov3'
-    cfg.note='digger'
+    parser = argparse.ArgumentParser()
+    now=datetime.now()
+    parser.add_argument('--note', default='digger'+now.strftime('%Y%m%d'),help='name for config files and weight file')
+    parser.add_argument('--save_cfg_dir', default='yzbx', help='dir for config files and template')
+    parser.add_argument('--train_dir', default='/home/yzbx/git/torchdet/model/yolov3', help='directory for trainning code')
+    parser.add_argument('--images_dir',default=None,help='directory to save reorder images/xml/txt')
+    parser.add_argument('--raw_dir',default='/media/sdb/ISCAS_Dataset/QingDao/digger',help='directory for raw labeled images')
+    args = parser.parse_args()
     
-    raw_dir='/media/sdb/ISCAS_Dataset/QingDao/digger'
+    
+    cfg=edict()
+    cfg.class_names=['excavator','truck','loader']
+    if args.images_dir is None:
+        cfg.images_dir=os.path.join(os.path.dirname(args.raw_dir),args.note)
+    else:
+        cfg.images_dir=args.images_dir
+    cfg.save_cfg_dir=args.save_cfg_dir
+    cfg.train_dir=args.train_dir
+    cfg.note=args.note
+    
     pipeline=darknet_pipeline(cfg)
-    pipeline.train_yolov3(raw_dir)
+    pipeline.train_yolov3(args.raw_dir)
