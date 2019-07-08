@@ -92,8 +92,8 @@ class darknet_pipeline():
 
             assert width>0 and height>0
             assert width>=x2>x1 and height>=y2>y1,'width={}, height={} in {}'.format(width,height,ann_file)
-            xc=(x1+x2)/width
-            yc=(y1+y2)/height
+            xc=(x1+x2)/width/2
+            yc=(y1+y2)/height/2
             w=(x2-x1)/width
             h=(y2-y1)/height
             # ['excavator','loader','truck']
@@ -123,7 +123,7 @@ class darknet_pipeline():
             f.write('classes={}\n'.format(self.class_num))
             f.write('train={}\n'.format(train_file))
             f.write('valid={}\n'.format(valid_file))
-            f.write('valid={}\n'.format(name_file))
+            f.write('names={}\n'.format(name_file))
             f.write('backup={}\n'.format('backup/'))
             f.write('eval=coco\n')
         
