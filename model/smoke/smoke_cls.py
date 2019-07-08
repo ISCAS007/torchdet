@@ -46,7 +46,17 @@ class trainer:
                 batch_size=config.batch_size if split=='train' else 1
                 shuffle=True if split=='train' else False
                 drop_last=True if split=='train' else False
-                self.dataset[split]=td.DataLoader(dataset=cls_dataset(config,split),
+                if config.dataset_name == 'all':
+                    datasets=[]
+                    for name in ['github_cair','CVPRLab','FireSense','VisiFire']:
+                        config.dataset_name=name
+                        datasets.append(cls_dataset(finetune_config(config),split))
+                    dataset=td.ConcatDataset(datasets)
+                else:
+                    dataset=cls_dataset(config,split)
+                        
+                dataset=cls_dataset(config,split)
+                self.dataset[split]=td.DataLoader(dataset,
                             batch_size=batch_size,
                             shuffle=shuffle,
                             drop_last=drop_last)
@@ -204,7 +214,7 @@ def get_parser():
                         default='vgg11')
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['github_cair','CVPRLab','FireSense','VisiFire'],
+                        choices=['github_cair','CVPRLab','FireSense','VisiFire','all'],
                         default='github_cair')
     
     parser.add_argument('--epoch',
@@ -286,6 +296,8 @@ def finetune_config(config):
         config.root_path=os.path.join('dataset','smoke',config.dataset_name)
     elif config.dataset_name in ['CVPRLab','FireSense','VisiFire']:
         config.root_path=os.path.join('dataset','smoke',config.dataset_name+'_img')
+    elif config.dataset_name == 'all':
+        warnings.warn('need finetune config when concat dataset')
     else:
         assert False
     return config

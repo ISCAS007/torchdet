@@ -13,6 +13,7 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 from jinja2 import Environment, FileSystemLoader
 from easydict import EasyDict as edict
+import random
 
 class darknet_pipeline():
     """
@@ -32,6 +33,7 @@ class darknet_pipeline():
         self.note=cfg.note
         self.train_dir=cfg.train_dir
         os.chdir(self.train_dir)
+        self.unknown_names=[]
         
     def rename(self,raw_dir):
         """
@@ -80,6 +82,7 @@ class darknet_pipeline():
 
         tree=ET.parse(ann_file)
         objs = tree.findall('object')
+        
         for obj in objs:
             name = obj.find('name')
             bndbox=obj.find('bndbox')
@@ -104,8 +107,10 @@ class darknet_pipeline():
                 write_line=' '.join([str(idx),str(xc),str(yc),str(w),str(h)])
                 write_file.write(write_line+'\n')
             else:
-                print('unknown name',name.text)
-        
+                if name.text.lower() not in self.unknown_names:
+                    self.unknown_names.append(name.text.lower())
+                    print('unknown name',name.text)
+
         if write_file is not None:
             write_file.close()
         
@@ -115,8 +120,8 @@ class darknet_pipeline():
         """
         os.makedirs(self.save_cfg_dir,exist_ok=True)
         data_file=os.path.join(self.save_cfg_dir,self.note+'.data')
-        train_file=os.path.join(self.save_cfg_dir,self.note+'.txt')
-        valid_file=train_file
+        train_file=os.path.join(self.save_cfg_dir,self.note+'_train.txt')
+        valid_file=os.path.join(self.save_cfg_dir,self.note+'_valid.txt')
         name_file=os.path.join(self.save_cfg_dir,self.note+'.names')
         config_file=os.path.join(self.save_cfg_dir,self.note+'.cfg')
         with open(data_file,'w') as f:
@@ -127,9 +132,23 @@ class darknet_pipeline():
             f.write('backup={}\n'.format('backup/'))
             f.write('eval=coco\n')
         
+        files=glob.glob(os.path.join(self.images_dir,'*.*'))
+        suffix=('jpg','jpeg','bmp','png')
+        img_files=[f for f in files if f.lower().endswith(suffix)]
+        random.shuffle(img_files)
         
+        N=len(img_files)*3//4
+        train_imgs=img_files[0:N]
+        valid_imgs=img_files[N:]
+        print('train dataset size',len(train_imgs))
+        print('valid dataset size',len(valid_imgs))
         with open(train_file,'w') as f:
-            img_files=glob.glob(os.path.join(self.images_dir,"*.jpg"))
+            img_files=train_imgs
+            for img_f in img_files:
+                f.write(img_f+'\n')
+                
+        with open(valid_file,'w') as f:
+            img_files=valid_imgs
             for img_f in img_files:
                 f.write(img_f+'\n')
                 
@@ -167,7 +186,8 @@ if __name__ == '__main__':
     
     
     cfg=edict()
-    cfg.class_names=['excavator','truck','loader']
+    #cfg.class_names=['excavator','truck','loader']
+    cfg.class_names=['excavator']
     if args.images_dir is None:
         cfg.images_dir=os.path.join(os.path.dirname(args.raw_dir),args.note)
     else:
