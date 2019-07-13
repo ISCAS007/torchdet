@@ -55,7 +55,7 @@ class darknet_pipeline():
         self.images_dir dir for image and xml
         self.txt_dir dir for output txt annotations
         """        
-        files=glob.glob(os.path.join(raw_dir,'**','*.*'))
+        files=glob.glob(os.path.join(raw_dir,'**','*.*'),recursive=True)
         suffix=('jpg','jpeg','bmp','png')
         img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
 #         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
