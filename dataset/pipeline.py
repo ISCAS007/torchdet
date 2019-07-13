@@ -14,6 +14,18 @@ import xml.etree.ElementTree as ET
 from jinja2 import Environment, FileSystemLoader
 from easydict import EasyDict as edict
 import random
+import warnings
+
+def check_img(img_f):
+    try:
+        img=cv2.imread(img_f)
+    except:
+        return False
+    else:
+        if img is None:
+            return False
+        else:
+            return True
 
 class darknet_pipeline():
     """
@@ -31,10 +43,11 @@ class darknet_pipeline():
         self.images_dir=cfg.images_dir
         self.save_cfg_dir=cfg.save_cfg_dir
         self.note=cfg.note
+        self.overwrite=cfg.overwrite
         self.train_dir=cfg.train_dir
         os.chdir(self.train_dir)
         self.unknown_names=[]
-        
+    
     def rename(self,raw_dir):
         """
         raw_dir: the dir for raw label files
@@ -47,17 +60,24 @@ class darknet_pipeline():
         
         files=glob.glob(os.path.join(in_path,'*','*.*'),recursive=True)
         suffix=('jpg','jpeg','bmp','png')
-        img_files=[f for f in files if f.lower().endswith(suffix)]
+        img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
 #         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
 #         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
         
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
-        for img_f in img_files:
-            xml_f=img_f.replace('jpg','xml')
+        for img_f in img_files:        
+            xml_f=os.path.splitext(img_f)[0]+'.xml'
+            
+            # just check how to get xml file from image file
+            img_suffix=os.path.splitext(img_f)[1]
+            test_xml_f=img_f.replace(img_suffix,'.xml')
+            if os.path.exists(test_xml_f) and not os.path.exists(xml_f):
+                warnings.warn('how to replace? {}'.format(img_f))
+                
             if os.path.exists(xml_f):
-                new_img_f=os.path.join(out_path,'{:06d}.jpg'.format(idx))
+                new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
                 new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
                 idx=idx+1
     #             print('copy {} to {}'.format(img_f,new_img_f))
@@ -65,23 +85,48 @@ class darknet_pipeline():
                 assert xml_f!=new_xml_f
 
                 os.makedirs(os.path.dirname(new_img_f),exist_ok=True)
-                if not os.path.exists(new_img_f):
+                if self.overwrite or not os.path.exists(new_img_f):
                     shutil.copy(img_f,new_img_f)
-                if not os.path.exists(new_xml_f):
+                if self.overwrite or not os.path.exists(new_xml_f):
                     shutil.copy(xml_f,new_xml_f)
-
+                
+                assert check_img(new_img_f),'bad image {}-->{} {}--> {}'.format(img_f,new_img_f,xml_f,new_xml_f)
+                
                 yolov3_file=new_xml_f.replace('/images/','/labels/').replace('.xml','.txt')
                 os.makedirs(os.path.dirname(yolov3_file),exist_ok=True)
     #             print("convert {} to {}".format(new_xml_f,txt_file))
-                self.convert2darknet_label(new_xml_f,yolov3_file)
+                self.convert2darknet_label(new_xml_f,yolov3_file,new_img_f)
 
                 darknet_file=new_xml_f.replace('/images/','/labels/').replace('.xml','.txt')
 
-    def convert2darknet_label(self,ann_file,out_file):
+    def convert2darknet_label(self,ann_file,out_file,img_file):
         write_file=None
-
-        tree=ET.parse(ann_file)
+        
+        try:
+            tree=ET.parse(ann_file)
+        except Exception as e:
+            print('cannot parse ann_file',ann_file,e)
+            assert False
+        
         objs = tree.findall('object')
+        
+        width=int(tree.find('size').find('width').text)
+        height=int(tree.find('size').find('height').text)
+        
+        try:
+            img=cv2.imread(img_file)
+            img_h,img_w=img.shape[0:2]
+            if width!=img_w or height!=img_h:
+                warnings.warn('bad size for annotation file {}'.format(ann_file))
+                print(height,width,img_h,img_w)
+                height=img_h
+                width=img_w
+        except Exception as e:
+            print(img_file,ann_file,e)
+            if img is None:
+                assert False
+            
+        assert width>0 and height>0,'for file {}'.format(ann_file)
         
         for obj in objs:
             name = obj.find('name')
@@ -90,11 +135,9 @@ class darknet_pipeline():
             y1=int(bndbox.find('ymin').text)
             x2=int(bndbox.find('xmax').text)
             y2=int(bndbox.find('ymax').text)
-            width=int(tree.find('size').find('width').text)
-            height=int(tree.find('size').find('height').text)
-
-            assert width>0 and height>0
+            
             assert width>=x2>x1 and height>=y2>y1,'width={}, height={} in {}'.format(width,height,ann_file)
+            
             xc=(x1+x2)/width/2
             yc=(y1+y2)/height/2
             w=(x2-x1)/width
@@ -182,6 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_dir', default='/home/yzbx/git/torchdet/model/yolov3', help='directory for trainning code')
     parser.add_argument('--images_dir',default=None,help='directory to save reorder images/xml/txt')
     parser.add_argument('--raw_dir',default='/media/sdb/ISCAS_Dataset/QingDao/digger',help='directory for raw labeled images')
+    parser.add_argument('--overwrite',action='store_true')
     args = parser.parse_args()
     
     
@@ -195,6 +239,7 @@ if __name__ == '__main__':
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
     cfg.note=args.note
+    cfg.overwrite=args.overwrite
     
     pipeline=darknet_pipeline(cfg)
     pipeline.train_yolov3(args.raw_dir)
