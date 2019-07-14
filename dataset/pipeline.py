@@ -249,7 +249,8 @@ class darknet_pipeline():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     now=datetime.now()
-    parser.add_argument('--note', default='digger'+now.strftime('%Y%m%d'),help='name for config files and weight file')
+    parser.add_argument('--note', default='digger',help='name for config files and weight file')
+    parser.add_argument('--class_num',default=1,type=int,help='class number for dataset')
     parser.add_argument('--save_cfg_dir', default='yzbx', help='dir for config files and template')
     parser.add_argument('--train_dir', default=os.path.expanduser('~/git/torchdet/model/yolov3'), help='directory for trainning code')
     parser.add_argument('--images_dir',default=None,help='directory to save reorder images/xml/txt')
@@ -260,15 +261,15 @@ if __name__ == '__main__':
     
     
     cfg=edict()
-    cfg.class_names=['excavator','truck','loader']
-#    cfg.class_names=['excavator']
+    class_names=['excavator','truck','loader']
+    cfg.class_names=class_names[0:args.class_num]
     if args.images_dir is None:
         cfg.images_dir=os.path.join(os.path.dirname(args.raw_dir),args.note)
     else:
         cfg.images_dir=args.images_dir
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
-    cfg.note=args.note
+    cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
     
