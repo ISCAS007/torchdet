@@ -26,7 +26,17 @@ def check_img(img_f):
             return False
         else:
             return True
-
+        
+def rename_tag(tag):
+    if tag.lower() in ['excavating','excavator']:
+        return 'excavator'
+    elif tag.lower() in ['b-truck','s-truck','truck']:
+        return 'truck'
+    elif tag.lower() in ['loader']:
+        return 'loader'
+    else:
+        return 'unknown'
+    
 class darknet_pipeline():
     """
     ## pipeline 1
@@ -35,8 +45,9 @@ class darknet_pipeline():
     [ rename(raw_dir) --> ] images_dir --> xxx.txt
     xxx.txt xxx.names --> xxx.data
     """
-    def __init__(self,cfg):
+    def __init__(self,cfg,rename_tag_fun):
         self.cfg=cfg
+        self.rename_tag=rename_tag_fun
         # ['excavator','loader','truck']
         self.class_names=[name.lower() for name in cfg.class_names]
         self.class_num=len(self.class_names)
@@ -47,7 +58,15 @@ class darknet_pipeline():
         self.train_dir=cfg.train_dir
         os.chdir(self.train_dir)
         self.unknown_names=[]
-    
+        self.object_count={}
+
+        
+    def update_object_count(self,name):
+        if name in self.object_count.keys():
+            self.object_count[name]+=1
+        else:
+            self.object_count[name]=1
+            
     def generate_txt(self,raw_dir):
         """
         convert xml dataset to txt dataset
@@ -96,10 +115,11 @@ class darknet_pipeline():
         idx=0
         for img_f in img_files:        
             xml_f=os.path.splitext(img_f)[0]+'.xml'
+            xml_f=xml_f.replace('JPEGImages','Annotations')
             
             # just check how to get xml file from image file
             img_suffix=os.path.splitext(img_f)[1]
-            test_xml_f=img_f.replace(img_suffix,'.xml')
+            test_xml_f=img_f.replace(img_suffix,'.xml').replace('JPEGImages','Annotations')
             if os.path.exists(test_xml_f) and not os.path.exists(xml_f):
                 warnings.warn('how to replace? {}'.format(img_f))
                 
@@ -168,16 +188,18 @@ class darknet_pipeline():
             w=(x2-x1)/width
             h=(y2-y1)/height
             # ['excavator','loader','truck']
-            if name.text.lower() in self.class_names:
+            tag=self.rename_tag(name.text)
+            if tag in self.class_names:
                 if write_file is None:
                     write_file=open(out_file,'w')
-                idx=self.class_names.index(name.text.lower())
+                idx=self.class_names.index(tag)
                 write_line=' '.join([str(idx),str(xc),str(yc),str(w),str(h)])
                 write_file.write(write_line+'\n')
+                self.update_object_count(tag)
             else:
-                if name.text.lower() not in self.unknown_names:
+                if tag=='unknown' and name.text.lower() not in self.unknown_names:
                     self.unknown_names.append(name.text.lower())
-                    print('unknown name',name.text)
+                    print('unknown name',name.text,ann_file)
 
         if write_file is not None:
             write_file.close()
@@ -210,6 +232,7 @@ class darknet_pipeline():
         valid_imgs=img_files[N:]
         print('train dataset size',len(train_imgs))
         print('valid dataset size',len(valid_imgs))
+        print(self.object_count)
         with open(train_file,'w') as f:
             img_files=train_imgs
             for img_f in img_files:
@@ -224,8 +247,11 @@ class darknet_pipeline():
             for n in self.class_names:
                 f.write(n+'\n')
 
-        env = Environment(loader=FileSystemLoader(self.save_cfg_dir))
-        template = env.get_template('yolov3.cfg.template')     
+        env = Environment(loader=FileSystemLoader('doc'))
+        if self.cfg.transfer:
+            template=env.get_template('yolov3_transfer.cfg.template')
+        else:
+            template = env.get_template('yolov3.cfg.template')     
         output = template.render(classes=self.class_num,filters=self.class_num*3+15)
 
         with open(config_file, 'w') as f:
@@ -257,21 +283,27 @@ if __name__ == '__main__':
     parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/QingDao/digger'),help='directory for raw labeled images')
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
+    parser.add_argument('--transfer',action='store_true')
     args = parser.parse_args()
     
     
     cfg=edict()
     class_names=['excavator','truck','loader']
     cfg.class_names=class_names[0:args.class_num]
+    cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
     if args.images_dir is None:
-        cfg.images_dir=os.path.join(os.path.dirname(args.raw_dir),args.note)
+        cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/QingDao'),args.note)
     else:
         cfg.images_dir=args.images_dir
+    
+    assert cfg.images_dir!=args.raw_dir
+    
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
-    cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
+    
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
+    cfg.transfer=args.transfer
     
-    pipeline=darknet_pipeline(cfg)
+    pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)
