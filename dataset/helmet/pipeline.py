@@ -55,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/helmet/old/helmet_github'),help='directory for raw labeled images')
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
+    parser.add_argument('--transfer',action='store_true')
     args = parser.parse_args()
     
     
@@ -72,6 +73,7 @@ if __name__ == '__main__':
     cfg.train_dir=args.train_dir
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
+    cfg.transfer=args.transfer
     
     pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)

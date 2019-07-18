@@ -17,6 +17,7 @@ from jinja2 import Environment, FileSystemLoader
 from easydict import EasyDict as edict
 import random
 import warnings
+from tqdm import trange
 
 def check_img(img_f):
     try:
