@@ -98,7 +98,7 @@ class darknet_pipeline():
 #         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
 #         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
         
-        for img_f in img_files:
+        for img_f in trange(img_files):
             self.object_count['img_file']+=1
             xml_f=os.path.splitext(img_f)[0]+'.xml'
             if os.path.exists(xml_f):
@@ -133,7 +133,7 @@ class darknet_pipeline():
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
-        for img_f in img_files:
+        for img_f in trange(img_files):
             self.object_count['img_file']+=1
             xml_f=os.path.splitext(img_f)[0]+'.xml'
             xml_f=xml_f.replace('JPEGImages','Annotations')
