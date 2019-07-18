@@ -63,11 +63,11 @@ if __name__ == '__main__':
     cfg.class_names=class_names[0:args.class_num]
     cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
     if args.images_dir is None:
-        cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/helmet'),args.note)
+        cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/helmet'),cfg.note)
     else:
         cfg.images_dir=args.images_dir
     
-    assert cfg.images_dir!=args.raw_dir
+    assert cfg.images_dir!=args.raw_dir,'{}!={}'.format(cfg.images_dir,args.raw_dir)
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
     cfg.overwrite=args.overwrite

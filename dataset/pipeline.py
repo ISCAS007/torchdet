@@ -2,6 +2,8 @@
 """
 convert QingDao digger dataset to darknet format
 - https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data
+remove bad image 
+- mogrify -set comment 'Extraneous bytes removed' *.jpg
 """
 import sys
 import os
@@ -37,6 +39,19 @@ def rename_tag(tag):
     else:
         return 'unknown'
     
+def get_files(raw_dir):
+    child_files=[]
+    for d in os.listdir(raw_dir):
+        child_dir=os.path.join(raw_dir,d)
+        if os.path.isdir(child_dir):
+            print('parse dir',child_dir)
+            child_files+=glob.glob(os.path.join(child_dir,'**','*.*'),recursive=True)
+    root_files=glob.glob(os.path.join(raw_dir,'*.*'),recursive=False)
+    
+    print('child files',len(child_files))
+    print('root files',len(root_files))
+    return root_files+child_files
+    
 class darknet_pipeline():
     """
     ## pipeline 1
@@ -59,7 +74,8 @@ class darknet_pipeline():
         os.chdir(self.train_dir)
         self.unknown_names=[]
         self.object_count={}
-
+        self.object_count['img_file']=0
+        self.object_count['xml_file']=0
         
     def update_object_count(self,name):
         if name in self.object_count.keys():
@@ -73,16 +89,19 @@ class darknet_pipeline():
         for different self.class_names, we have different class
         self.images_dir dir for image and xml
         self.txt_dir dir for output txt annotations
-        """        
-        files=glob.glob(os.path.join(raw_dir,'**','*.*'),recursive=True)
+        """
+        files=get_files(raw_dir)
+            
         suffix=('jpg','jpeg','bmp','png')
         img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
 #         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
 #         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
         
-        for img_f in img_files:        
+        for img_f in img_files:
+            self.object_count['img_file']+=1
             xml_f=os.path.splitext(img_f)[0]+'.xml'
             if os.path.exists(xml_f):
+                self.object_count['xml_file']+=1
                 txt_file=os.path.join(self.images_dir,os.path.basename(xml_f).replace('.xml','.txt'))
                 new_img_f=os.path.join(self.images_dir,os.path.basename(img_f))
                 os.makedirs(os.path.dirname(new_img_f),exist_ok=True)
@@ -101,10 +120,10 @@ class darknet_pipeline():
         result: rename image name and generate darknet format label
         todo: image without xml means no objects?
         """
-        in_path=raw_dir
         out_path=self.images_dir
         
-        files=glob.glob(os.path.join(in_path,'**','*.*'),recursive=True)
+        files=get_files(raw_dir)
+        
         suffix=('jpg','jpeg','bmp','png')
         img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
 #         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
@@ -113,7 +132,8 @@ class darknet_pipeline():
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
-        for img_f in img_files:        
+        for img_f in img_files:
+            self.object_count['img_file']+=1
             xml_f=os.path.splitext(img_f)[0]+'.xml'
             xml_f=xml_f.replace('JPEGImages','Annotations')
             
@@ -124,6 +144,7 @@ class darknet_pipeline():
                 warnings.warn('how to replace? {}'.format(img_f))
                 
             if os.path.exists(xml_f):
+                self.object_count['xml_file']+=1
                 new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
                 new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
                 idx=idx+1
@@ -247,7 +268,7 @@ class darknet_pipeline():
             for n in self.class_names:
                 f.write(n+'\n')
 
-        env = Environment(loader=FileSystemLoader('doc'))
+        env = Environment(loader=FileSystemLoader(self.save_cfg_dir))
         if self.cfg.transfer:
             template=env.get_template('yolov3_transfer.cfg.template')
         else:
@@ -292,11 +313,11 @@ if __name__ == '__main__':
     cfg.class_names=class_names[0:args.class_num]
     cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
     if args.images_dir is None:
-        cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/QingDao'),args.note)
+        cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/QingDao'),cfg.note)
     else:
         cfg.images_dir=args.images_dir
     
-    assert cfg.images_dir!=args.raw_dir
+    assert cfg.images_dir!=args.raw_dir,'{}!={}'.format(cfg.images_dir,args.raw_dir)
     
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
