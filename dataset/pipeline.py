@@ -292,7 +292,7 @@ class darknet_pipeline():
         
         print("run the follow code to train\n")
         print("cd {}".format(self.train_dir))
-        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave && mv weights/latest.pt weights/{note}.pt".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
+        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave --note {note} && mv weights/{note}/latest.pt weights/{note}/{note}.pt".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
