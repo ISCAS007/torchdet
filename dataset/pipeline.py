@@ -235,7 +235,12 @@ class darknet_pipeline():
         train_file=os.path.join(self.save_cfg_dir,self.note+'_train.txt')
         valid_file=os.path.join(self.save_cfg_dir,self.note+'_valid.txt')
         name_file=os.path.join(self.save_cfg_dir,self.note+'.names')
-        config_file=os.path.join(self.save_cfg_dir,self.note+'.cfg')
+        if self.cfg.spp:
+            basename='yolov3-spp_cls'+str(self.class_num)+'.cfg'
+        else:
+            basename='yolov3_cls'+str(self.class_num)+'.cfg'
+            
+        config_file=os.path.join(self.save_cfg_dir,basename)
         with open(data_file,'w') as f:
             f.write('classes={}\n'.format(self.class_num))
             f.write('train={}\n'.format(train_file))
@@ -270,8 +275,8 @@ class darknet_pipeline():
                 f.write(n+'\n')
 
         env = Environment(loader=FileSystemLoader(self.save_cfg_dir))
-        if self.cfg.transfer:
-            template=env.get_template('yolov3_transfer.cfg.template')
+        if self.cfg.spp:
+            template=env.get_template('yolov3-spp.cfg.template')
         else:
             template = env.get_template('yolov3.cfg.template')     
         output = template.render(classes=self.class_num,filters=self.class_num*3+15)
@@ -292,7 +297,7 @@ class darknet_pipeline():
         
         print("run the follow code to train\n")
         print("cd {}".format(self.train_dir))
-        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave --note {note} && mv weights/{note}/latest.pt weights/{note}/{note}.pt".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
+        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave --note {note}".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -305,7 +310,7 @@ if __name__ == '__main__':
     parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/QingDao/digger'),help='directory for raw labeled images')
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
-    parser.add_argument('--transfer',action='store_true')
+    parser.add_argument('--spp',action='store_true',help='use yolov3-spp or yolov3')
     args = parser.parse_args()
     
     
@@ -325,7 +330,7 @@ if __name__ == '__main__':
     
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
-    cfg.transfer=args.transfer
+    cfg.spp=args.spp
     
     pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)
