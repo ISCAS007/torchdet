@@ -65,8 +65,10 @@ if __name__ == '__main__':
     parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/helmet/old/helmet_github'),help='directory for raw labeled images')
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
-    parser.add_argument('--transfer',action='store_true')
+    parser.add_argument('--spp',action='store_true')
     parser.add_argument('--color',action='store_true')
+    parser.add_argument('--keep_image_without_label',action='store_true')
+    
     args = parser.parse_args()
     
     
@@ -84,7 +86,8 @@ if __name__ == '__main__':
     cfg.train_dir=args.train_dir
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
-    cfg.transfer=args.transfer
+    cfg.spp=args.spp
+    cfg.keep_image_without_label=args.keep_image_without_label
     
     if args.color:
         assert args.class_num==5
