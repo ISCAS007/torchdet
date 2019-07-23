@@ -73,7 +73,10 @@ if __name__ == '__main__':
     
     
     cfg=edict()
-    class_names=['helmet','none','people','seatbelt']
+    if args.color:
+        class_names=['yellow','white','red','blue','none']
+    else:
+        class_names=['helmet','none','people','seatbelt']
     cfg.class_names=class_names[0:args.class_num]
     cfg.note='_'.join([args.note,'cls'+str(args.class_num),now.strftime('%Y%m%d')])
     if args.images_dir is None:
