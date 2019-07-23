@@ -6,6 +6,8 @@ convert QingDao helmet dataset to darknet format
 - https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data
 convert Chinese Code
 - yzbxLib/tmp/config/yzbx_helmet_label.py
+head and face detection dataset
+- https://github.com/HCIILAB/SCUT-HEAD-Dataset-Release
 """
 import sys
 import os
@@ -44,6 +46,14 @@ def rename_tag(tag):
     else:
         return 'unknown'
     
+def rename_tag_color(tag):
+    if tag in ['yellow','white','red','blue']:
+        return tag
+    elif tag in ['none']:
+        return tag
+    else:
+        return 'unknown'
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     now=datetime.now()
@@ -56,6 +66,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
     parser.add_argument('--transfer',action='store_true')
+    parser.add_argument('--color',action='store_true')
     args = parser.parse_args()
     
     
@@ -75,5 +86,9 @@ if __name__ == '__main__':
     cfg.rename_dataset=args.rename_dataset
     cfg.transfer=args.transfer
     
-    pipeline=darknet_pipeline(cfg,rename_tag)
+    if args.color:
+        assert args.class_num==5
+        pipeline=darknet_pipeline(cfg,rename_tag_color)
+    else:
+        pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)

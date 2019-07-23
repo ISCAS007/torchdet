@@ -1,4 +1,5 @@
 # torchdet
+pytorch1.0 for object detection with open source model
 
 ## split image to detect small object
 - remove bounding box on the boundary for each small image

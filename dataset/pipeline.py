@@ -52,6 +52,15 @@ def get_files(raw_dir):
     print('child files',len(child_files))
     print('root files',len(root_files))
     return root_files+child_files
+
+def img2xml(img_f):
+    xml_f=os.path.splitext(img_f)[0]+'.xml'
+    xml_f=xml_f.replace('JPEGImages','Annotations')
+    
+    if os.path.exists(xml_f):
+        return xml_f
+    else:
+        return None
     
 class darknet_pipeline():
     """
@@ -95,13 +104,11 @@ class darknet_pipeline():
             
         suffix=('jpg','jpeg','bmp','png')
         img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
-#         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
-#         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
         
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
-            xml_f=os.path.splitext(img_f)[0]+'.xml'
-            if os.path.exists(xml_f):
+            xml_f=img2xml(img_f)
+            if xml_f:
                 self.object_count['xml_file']+=1
                 txt_file=os.path.join(self.images_dir,os.path.basename(xml_f).replace('.xml','.txt'))
                 new_img_f=os.path.join(self.images_dir,os.path.basename(img_f))
@@ -127,25 +134,17 @@ class darknet_pipeline():
         
         suffix=('jpg','jpeg','bmp','png')
         img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
-#         xml_files=glob.glob(os.path.join(in_path,'*','*.xml'))
-#         img_files=[f for f in img_files if f.replace('jpg','xml') in xml_files]
         
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
-            xml_f=os.path.splitext(img_f)[0]+'.xml'
-            xml_f=xml_f.replace('JPEGImages','Annotations')
-            
-            # just check how to get xml file from image file
-            img_suffix=os.path.splitext(img_f)[1]
-            test_xml_f=img_f.replace(img_suffix,'.xml').replace('JPEGImages','Annotations')
-            if os.path.exists(test_xml_f) and not os.path.exists(xml_f):
-                warnings.warn('how to replace? {}'.format(img_f))
+            xml_f=img2xml(img_f)
                 
-            if os.path.exists(xml_f):
+            if xml_f:
                 self.object_count['xml_file']+=1
+                img_suffix=os.path.splitext(img_f)[1]
                 new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
                 new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
                 idx=idx+1
@@ -215,6 +214,7 @@ class darknet_pipeline():
                 if write_file is None:
                     write_file=open(out_file,'w')
                 idx=self.class_names.index(tag)
+                assert idx>=0 and idx<len(self.class_names),'idx={},tag={},class_names={}'.format(idx,tag,self.class_names)
                 write_line=' '.join([str(idx),str(xc),str(yc),str(w),str(h)])
                 write_file.write(write_line+'\n')
                 self.update_object_count(tag)
@@ -251,7 +251,12 @@ class darknet_pipeline():
         
         files=glob.glob(os.path.join(self.images_dir,'*.*'))
         suffix=('jpg','jpeg','bmp','png')
-        img_files=[f for f in files if f.lower().endswith(suffix)]
+        
+        if self.cfg.keep_image_without_label:
+            img_files=[f for f in files if f.lower().endswith(suffix)]
+        else:
+            img_files=[f for f in files if f.lower().endswith(suffix) and img2xml(f)]
+            
         random.shuffle(img_files)
         
         N=len(img_files)*3//4
@@ -259,6 +264,7 @@ class darknet_pipeline():
         valid_imgs=img_files[N:]
         print('train dataset size',len(train_imgs))
         print('valid dataset size',len(valid_imgs))
+        print('all image, valid xml_f:')
         print(self.object_count)
         with open(train_file,'w') as f:
             img_files=train_imgs
@@ -311,6 +317,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
     parser.add_argument('--spp',action='store_true',help='use yolov3-spp or yolov3')
+    parser.add_argument('--keep_image_without_label',action='store_true')
     args = parser.parse_args()
     
     
@@ -331,6 +338,7 @@ if __name__ == '__main__':
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
     cfg.spp=args.spp
+    cfg.keep_image_without_label=args.keep_image_without_label
     
     pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)
