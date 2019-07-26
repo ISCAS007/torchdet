@@ -27,9 +27,9 @@ def get_dataset(config,split,crop_size=224,base_size=256):
     
     return dataset
 
-def get_loader(config,get_dataset_fn,split,crop_size=224,base_size=256):
+def get_loader(config,get_dataset_fn,split,crop_size=224,base_size=256,val_batch_size=1):
     dataset=get_dataset_fn(config,split,crop_size,base_size)
-    batch_size=config.batch_size if split=='train' else 1
+    batch_size=config.batch_size if split=='train' else val_batch_size
     shuffle=True if split=='train' else False
     drop_last=True if split=='train' else False
     loader=td.DataLoader(dataset,

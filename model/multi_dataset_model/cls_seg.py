@@ -71,7 +71,8 @@ def get_seg_dataloader(config,split):
     else:
         assert False
     
-    batch_size=config.batch_size if split=='train' else 1
+#    batch_size=config.batch_size if split=='train' else 1
+    batch_size=config.batch_size
     drop_last=True if split=='train' else False
     if split=='train':
         sampler=RandomSampler(dataset)
@@ -86,7 +87,7 @@ def get_seg_dataloader(config,split):
     return data_loader
 
 def get_cls_dataloader(config,split):
-    return get_loader(config,get_dataset,split,crop_size=480,base_size=520)
+    return get_loader(config,get_dataset,split,crop_size=480,base_size=520,val_batch_size=config.batch_size)
 
 class SharedClsModel(nn.Module):
     def __init__(self,config,backbone,num_class):
@@ -142,7 +143,7 @@ class MultiModel(nn.Module):
         just output part of model result
         """
         output_dict={}
-        for key,value in self.models.items():
+        for key,value in input_dict.items():
             if key=='seg':
                 output_dict[key]=self.models[key].forward(input_dict[key])['out']
             else:
@@ -244,7 +245,10 @@ class MultiTrainer:
             seg_dataloader=get_seg_dataloader(self.config,split)
             return MyLoader([cls_dataloader,seg_dataloader])
         elif key == 'cls':
-            return get_cls_dataloader(self.config,split)
+            cls_config=self.config.copy()
+            cls_config=edict(cls_config)
+            cls_config.root_path=os.path.join('~/cvdataset/places365_standard')
+            return get_cls_dataloader(cls_config,split)
         elif key == 'seg':
             return get_seg_dataloader(self.config,split)
         else:
@@ -325,7 +329,7 @@ class MultiTrainer:
             self.metric.update(outputs,labels,losses)
         
         metric_dict=self.metric.get_metric()
-        self.writer_metric(metric_dict,'train',epoch)
+        self.write_metric(metric_dict,'train',epoch)
         
     def validation(self,epoch):
         self.model.eval()
@@ -335,21 +339,18 @@ class MultiTrainer:
             tqdm_step = tqdm(dataloader, desc='step', leave=False)
             assert len(dataloader)>0
             for i,(data) in enumerate(tqdm_step):
-                self.optimizer.zero_grad()
                 inputs,labels=self.get_data(data,'val',key)
                 outputs=self.model.forward(inputs)
                 losses=self.get_loss(outputs,labels)
                 
                 total_loss=0
-                for key,loss in losses:
-                    loss.backward()
+                for key,loss in losses.items():
                     total_loss+=loss
-                self.optimizer.step()
                 
                 tqdm_step.set_postfix(total_loss=total_loss.item())
-                self.metric.update(outputs,labels,losses,key)
+                self.metric.update(outputs,labels,losses)
         metric_dict=self.metric.get_metric()
-        self.writer_metric(metric_dict,'val',epoch)
+        self.write_metric(metric_dict,'val',epoch)
         
     def train_val(self):
         tqdm_epoch = trange(self.config.epoch, desc='epoch', leave=True)
