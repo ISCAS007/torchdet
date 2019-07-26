@@ -40,7 +40,7 @@ def rename_tag(tag):
     else:
         return 'unknown'
     
-def get_files(raw_dir):
+def get_img_files(raw_dir):
     child_files=[]
     for d in os.listdir(raw_dir):
         child_dir=os.path.join(raw_dir,d)
@@ -51,7 +51,14 @@ def get_files(raw_dir):
     
     print('child files',len(child_files))
     print('root files',len(root_files))
-    return root_files+child_files
+    
+    files=root_files+child_files
+    suffix=('jpg','jpeg','bmp','png')
+    img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
+    print('get {} image in {}'.format(len(img_files),raw_dir))
+    
+    return img_files
+        
 
 def img2xml(img_f):
     xml_f=os.path.splitext(img_f)[0]+'.xml'
@@ -100,11 +107,8 @@ class darknet_pipeline():
         self.images_dir dir for image and xml
         self.txt_dir dir for output txt annotations
         """
-        files=get_files(raw_dir)
+        img_files=get_img_files(raw_dir)
             
-        suffix=('jpg','jpeg','bmp','png')
-        img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
-        
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
             xml_f=img2xml(img_f)
@@ -130,31 +134,29 @@ class darknet_pipeline():
         """
         out_path=self.images_dir
         
-        files=get_files(raw_dir)
-        
-        suffix=('jpg','jpeg','bmp','png')
-        img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
+        img_files=get_img_files(raw_dir)
         
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
+            
+            img_suffix=os.path.splitext(img_f)[1]
+            new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
+            assert img_f!=new_img_f
+            idx=idx+1
+            
+            os.makedirs(os.path.dirname(new_img_f),exist_ok=True)
+            if self.overwrite or not os.path.exists(new_img_f):
+                shutil.copy(img_f,new_img_f)
+                    
             xml_f=img2xml(img_f)
-                
             if xml_f:
                 self.object_count['xml_file']+=1
-                img_suffix=os.path.splitext(img_f)[1]
-                new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
                 new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
-                idx=idx+1
-    #             print('copy {} to {}'.format(img_f,new_img_f))
-                assert img_f!=new_img_f
                 assert xml_f!=new_xml_f
-
-                os.makedirs(os.path.dirname(new_img_f),exist_ok=True)
-                if self.overwrite or not os.path.exists(new_img_f):
-                    shutil.copy(img_f,new_img_f)
+                
                 if self.overwrite or not os.path.exists(new_xml_f):
                     shutil.copy(xml_f,new_xml_f)
                 
