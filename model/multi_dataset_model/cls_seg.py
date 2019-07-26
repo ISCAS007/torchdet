@@ -284,7 +284,7 @@ class MultiTrainer:
             
             reIndexed_label=torch.zeros_like(label)+255
             for idx,id in enumerate(foreground_class_ids):
-                reIndexed_label.where(label!=id,idx)
+                reIndexed_label.where(label!=id,torch.tensor(idx).to(self.device))
             labels['seg']=reIndexed_label
         return inputs,labels
     
