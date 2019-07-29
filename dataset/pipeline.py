@@ -2,7 +2,7 @@
 """
 convert QingDao digger dataset to darknet format
 - https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data
-remove bad image 
+remove bad image
 - mogrify -set comment 'Extraneous bytes removed' *.jpg
 """
 import sys
@@ -29,7 +29,7 @@ def check_img(img_f):
             return False
         else:
             return True
-        
+
 def rename_tag(tag):
     if tag.lower() in ['excavating','excavator']:
         return 'excavator'
@@ -39,7 +39,7 @@ def rename_tag(tag):
         return 'loader'
     else:
         return 'unknown'
-    
+
 def get_img_files(raw_dir):
     child_files=[]
     for d in os.listdir(raw_dir):
@@ -48,27 +48,27 @@ def get_img_files(raw_dir):
             print('parse dir',child_dir)
             child_files+=glob.glob(os.path.join(child_dir,'**','*.*'),recursive=True)
     root_files=glob.glob(os.path.join(raw_dir,'*.*'),recursive=False)
-    
+
     print('child files',len(child_files))
     print('root files',len(root_files))
-    
+
     files=root_files+child_files
     suffix=('jpg','jpeg','bmp','png')
     img_files=[f for f in files if f.lower().endswith(suffix) and check_img(f)]
     print('get {} image in {}'.format(len(img_files),raw_dir))
-    
+
     return img_files
-        
+
 
 def img2xml(img_f):
     xml_f=os.path.splitext(img_f)[0]+'.xml'
     xml_f=xml_f.replace('JPEGImages','Annotations')
-    
+
     if os.path.exists(xml_f):
         return xml_f
     else:
         return None
-    
+
 class darknet_pipeline():
     """
     ## pipeline 1
@@ -93,13 +93,13 @@ class darknet_pipeline():
         self.object_count={}
         self.object_count['img_file']=0
         self.object_count['xml_file']=0
-        
+
     def update_object_count(self,name):
         if name in self.object_count.keys():
             self.object_count[name]+=1
         else:
             self.object_count[name]=1
-            
+
     def generate_txt(self,raw_dir):
         """
         convert xml dataset to txt dataset
@@ -108,7 +108,7 @@ class darknet_pipeline():
         self.txt_dir dir for output txt annotations
         """
         img_files=get_img_files(raw_dir)
-            
+
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
             xml_f=img2xml(img_f)
@@ -120,11 +120,11 @@ class darknet_pipeline():
                 if self.overwrite or not os.path.exists(new_img_f):
                     shutil.copy(img_f,new_img_f)
                 assert check_img(new_img_f),'bad image {}-->{}'.format(img_f,new_img_f)
-                
+
                 os.makedirs(os.path.dirname(txt_file),exist_ok=True)
     #             print("convert {} to {}".format(new_xml_f,txt_file))
                 self.convert2darknet_label(xml_f,txt_file,img_f)
-                
+
     def rename(self,raw_dir):
         """
         raw_dir: the dir for raw label files
@@ -133,54 +133,56 @@ class darknet_pipeline():
         todo: image without xml means no objects?
         """
         out_path=self.images_dir
-        
+
         img_files=get_img_files(raw_dir)
-        
+
         # name image with {:06d}.jpg
         assert len(img_files)<999999
         idx=0
         for img_f in tqdm(img_files):
             self.object_count['img_file']+=1
-            
+
             img_suffix=os.path.splitext(img_f)[1]
             new_img_f=os.path.join(out_path,'{:06d}{}'.format(idx,img_suffix))
             assert img_f!=new_img_f
+            new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
+
             idx=idx+1
-            
+
             os.makedirs(os.path.dirname(new_img_f),exist_ok=True)
             if self.overwrite or not os.path.exists(new_img_f):
                 shutil.copy(img_f,new_img_f)
-                    
+
             xml_f=img2xml(img_f)
             if xml_f:
                 self.object_count['xml_file']+=1
-                new_xml_f=os.path.join(out_path,'{:06d}.xml'.format(idx))
+
                 assert xml_f!=new_xml_f
-                
+
                 if self.overwrite or not os.path.exists(new_xml_f):
                     shutil.copy(xml_f,new_xml_f)
-                
+
                 assert check_img(new_img_f),'bad image {}-->{} {}--> {}'.format(img_f,new_img_f,xml_f,new_xml_f)
-                
+
                 txt_file=new_xml_f.replace('/images/','/labels/').replace('.xml','.txt')
                 os.makedirs(os.path.dirname(txt_file),exist_ok=True)
     #             print("convert {} to {}".format(new_xml_f,txt_file))
                 self.convert2darknet_label(new_xml_f,txt_file,new_img_f)
-                
+
     def convert2darknet_label(self,ann_file,out_file,img_file):
         write_file=None
-        
+
         try:
             tree=ET.parse(ann_file)
         except Exception as e:
             print('cannot parse ann_file',ann_file,e)
             assert False
-        
+
         objs = tree.findall('object')
-        
+
         width=int(tree.find('size').find('width').text)
         height=int(tree.find('size').find('height').text)
-        
+
         try:
             img=cv2.imread(img_file)
             img_h,img_w=img.shape[0:2]
@@ -193,9 +195,9 @@ class darknet_pipeline():
             print(img_file,ann_file,e)
             if img is None:
                 assert False
-            
+
         assert width>0 and height>0,'for file {}'.format(ann_file)
-        
+
         for obj in objs:
             name = obj.find('name')
             bndbox=obj.find('bndbox')
@@ -203,15 +205,15 @@ class darknet_pipeline():
             y1=int(bndbox.find('ymin').text)
             x2=int(bndbox.find('xmax').text)
             y2=int(bndbox.find('ymax').text)
-            
+
             assert width>=x2>x1 and height>=y2>y1,'width={}, height={} in {}'.format(width,height,ann_file)
-            
+
             xc=(x1+x2)/width/2
             yc=(y1+y2)/height/2
             w=(x2-x1)/width
             h=(y2-y1)/height
             # ['excavator','loader','truck']
-            tag=self.rename_tag(name.text)
+            tag=self.rename_tag(name.text.lower())
             if tag in self.class_names:
                 if write_file is None:
                     write_file=open(out_file,'w')
@@ -227,7 +229,7 @@ class darknet_pipeline():
 
         if write_file is not None:
             write_file.close()
-        
+
     def generate_files(self):
         """
         generate config files like xxx.data, xxx.txt
@@ -241,7 +243,7 @@ class darknet_pipeline():
             basename='yolov3-spp_cls'+str(self.class_num)+'.cfg'
         else:
             basename='yolov3_cls'+str(self.class_num)+'.cfg'
-            
+
         config_file=os.path.join(self.save_cfg_dir,basename)
         with open(data_file,'w') as f:
             f.write('classes={}\n'.format(self.class_num))
@@ -250,17 +252,22 @@ class darknet_pipeline():
             f.write('names={}\n'.format(name_file))
             f.write('backup={}\n'.format('backup/'))
             f.write('eval=coco\n')
-        
+
         files=glob.glob(os.path.join(self.images_dir,'*.*'))
         suffix=('jpg','jpeg','bmp','png')
-        
+
         if self.cfg.keep_image_without_label:
+            warnings.warn('keep image without label')
             img_files=[f for f in files if f.lower().endswith(suffix)]
         else:
+            warnings.warn('remove follow images without label:')
             img_files=[f for f in files if f.lower().endswith(suffix) and img2xml(f)]
-            
+
+            removed_imgs=[f for f in files if f.lower().endswith(suffix) and (not img2xml(f))]
+            print(removed_imgs)
+
         random.shuffle(img_files)
-        
+
         N=len(img_files)*3//4
         train_imgs=img_files[0:N]
         valid_imgs=img_files[N:]
@@ -272,12 +279,12 @@ class darknet_pipeline():
             img_files=train_imgs
             for img_f in img_files:
                 f.write(img_f+'\n')
-                
+
         with open(valid_file,'w') as f:
             img_files=valid_imgs
             for img_f in img_files:
                 f.write(img_f+'\n')
-                
+
         with open(name_file,'w') as f:
             for n in self.class_names:
                 f.write(n+'\n')
@@ -286,27 +293,27 @@ class darknet_pipeline():
         if self.cfg.spp:
             template=env.get_template('yolov3-spp.cfg.template')
         else:
-            template = env.get_template('yolov3.cfg.template')     
+            template = env.get_template('yolov3.cfg.template')
         output = template.render(classes=self.class_num,filters=self.class_num*3+15)
 
         with open(config_file, 'w') as f:
             f.write(output)
         print('generate {} {} {} {}'.format(data_file,train_file,name_file,config_file))
-        
+
         return data_file,config_file
-    
+
     def train_yolov3(self,raw_dir):
         if self.cfg.rename_dataset:
             self.rename(raw_dir)
         else:
             self.generate_txt(raw_dir)
-        
+
         data_file,cfg_file=self.generate_files()
-        
+
         print("run the follow code to train\n")
         print("cd {}".format(self.train_dir))
         print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave --note {note}".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
-    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     now=datetime.now()
@@ -321,8 +328,8 @@ if __name__ == '__main__':
     parser.add_argument('--spp',action='store_true',help='use yolov3-spp or yolov3')
     parser.add_argument('--keep_image_without_label',action='store_true')
     args = parser.parse_args()
-    
-    
+
+
     cfg=edict()
     class_names=['excavator','truck','loader']
     cfg.class_names=class_names[0:args.class_num]
@@ -331,16 +338,16 @@ if __name__ == '__main__':
         cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/QingDao'),cfg.note)
     else:
         cfg.images_dir=args.images_dir
-    
+
     assert cfg.images_dir!=args.raw_dir,'{}!={}'.format(cfg.images_dir,args.raw_dir)
-    
+
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
-    
+
     cfg.overwrite=args.overwrite
     cfg.rename_dataset=args.rename_dataset
     cfg.spp=args.spp
     cfg.keep_image_without_label=args.keep_image_without_label
-    
+
     pipeline=darknet_pipeline(cfg,rename_tag)
     pipeline.train_yolov3(args.raw_dir)

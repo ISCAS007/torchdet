@@ -45,15 +45,24 @@ def rename_tag(tag):
         return 'none'
     else:
         return 'unknown'
-    
+
 def rename_tag_color(tag):
-    if tag in ['yellow','white','red','blue']:
+    labels=['yellow','white','red','blue','orange','others']
+    if tag in labels:
         return tag
+    elif '-helmet' in tag or len(tag)==1:
+        for l in labels:
+            if tag[0] == l[0]:
+                return l
+        if tag in ['qt-helmet']:
+            return 'others'
+        else:
+            return 'unknown'
     elif tag in ['none']:
         return tag
     else:
         return 'unknown'
-    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     now=datetime.now()
@@ -62,19 +71,19 @@ if __name__ == '__main__':
     parser.add_argument('--save_cfg_dir', default='yzbx', help='dir for config files and template')
     parser.add_argument('--train_dir', default=os.path.expanduser('~/git/torchdet/model/yolov3'), help='directory for trainning code')
     parser.add_argument('--images_dir',default=None,help='directory to save reorder images/xml/txt')
-    parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/helmet/old/helmet_github'),help='directory for raw labeled images')
+    parser.add_argument('--raw_dir',default=os.path.expanduser('~/cvdataset/helmet/helmet'),help='directory for raw labeled images')
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--rename_dataset',action='store_true')
     parser.add_argument('--spp',action='store_true')
     parser.add_argument('--color',action='store_true')
     parser.add_argument('--keep_image_without_label',action='store_true')
-    
+
     args = parser.parse_args()
-    
-    
+
+
     cfg=edict()
     if args.color:
-        class_names=['yellow','white','red','blue','none']
+        class_names=['yellow','white','red','blue','orange','others','none']
     else:
         class_names=['helmet','none','people','seatbelt']
     cfg.class_names=class_names[0:args.class_num]
@@ -83,7 +92,7 @@ if __name__ == '__main__':
         cfg.images_dir=os.path.join(os.path.expanduser('~/cvdataset/helmet'),cfg.note)
     else:
         cfg.images_dir=args.images_dir
-    
+
     assert cfg.images_dir!=args.raw_dir,'{}!={}'.format(cfg.images_dir,args.raw_dir)
     cfg.save_cfg_dir=args.save_cfg_dir
     cfg.train_dir=args.train_dir
@@ -91,9 +100,9 @@ if __name__ == '__main__':
     cfg.rename_dataset=args.rename_dataset
     cfg.spp=args.spp
     cfg.keep_image_without_label=args.keep_image_without_label
-    
+
     if args.color:
-        assert args.class_num==5
+        assert args.class_num==len(class_names)
         pipeline=darknet_pipeline(cfg,rename_tag_color)
     else:
         pipeline=darknet_pipeline(cfg,rename_tag)
