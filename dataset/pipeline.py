@@ -4,6 +4,10 @@ convert QingDao digger dataset to darknet format
 - https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data
 remove bad image
 - mogrify -set comment 'Extraneous bytes removed' *.jpg
+- python dataset/helmet/pipeline.py --rename_dataset --color --class_num 7
+- python dataset/pipeline.py --rename_dataset --class_num 2
+- python util/generate_config.py --class_num 7 --template_path doc/yolov3.cfg.template --save_dir model/yolov3/yzbx
+- python util/generate_config.py --class_num 7 --template_path doc/yolov3-spp.cfg.template --save_dir model/yolov3/yzbx
 """
 import sys
 import os
@@ -206,7 +210,7 @@ class darknet_pipeline():
             x2=int(bndbox.find('xmax').text)
             y2=int(bndbox.find('ymax').text)
 
-            assert width>=x2>x1 and height>=y2>y1,'width={}, height={} in {}'.format(width,height,ann_file)
+            assert width>=x2>x1 and height>=y2>y1,'width={}>={}>{}, height={}>={}>{} in {}'.format(width,x2,x1,height,y2,y1,ann_file)
 
             xc=(x1+x2)/width/2
             yc=(y1+y2)/height/2
