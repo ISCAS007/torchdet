@@ -1,19 +1,128 @@
 # -*- coding: utf-8 -*-
-import os
+
+import cv2
 import torch.utils.data as td
+import os
+import glob
+from sklearn.model_selection import train_test_split
+import numpy as np
 import torch
+from easydict import EasyDict as edict
 import time
 import json
-from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
-import argparse
-from easydict import EasyDict as edict
-import numpy as np
-from model.smoke.dataset import cls_dataset,simple_preprocess
-import yaml
-import glob
+from tensorboardX import SummaryWriter
 import warnings
-import cv2
+import argparse
+
+def check_img(img_f):
+    try:
+        img=cv2.imread(img_f)
+        img_size=(224,224)
+        cv2.resize(img,tuple(img_size),interpolation=cv2.INTER_LINEAR)
+    except:
+        warnings.warn('bad image {}'.format(img_f))
+        return False
+    else:
+        if img is None:
+            warnings.warn('bad image {}'.format(img_f))
+            return False
+        else:
+            return True
+
+class people_smoking:
+    def __init__(self,root_path):
+        self.pos_files=glob.glob(os.path.join(root_path,'pos','*','*.*'))
+        self.neg_files=glob.glob(os.path.join(root_path,'neg','*','*.*'))
+
+        img_suffix=('jpg','jpeg','bmp','png')
+        self.pos_files=[f for f in self.pos_files if f.lower().endswith(img_suffix) and check_img(f)]
+        self.neg_files=[f for f in self.neg_files if f.lower().endswith(img_suffix) and check_img(f)]
+        self.pos_files.sort()
+        self.neg_files.sort()
+
+        assert len(self.pos_files)>0,'positive sample images cannot be empty'
+        assert len(self.neg_files)>0,'negative sample images cannot be empty'
+
+        self.names=['normal','smoking']
+
+    def get_train_val(self,test_size=0.33,random_state=25):
+        x=self.pos_files+self.neg_files
+        # index 1 for pos, 0 for neg
+        y=[1]*len(self.pos_files)+[0]*len(self.neg_files)
+
+        x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=test_size,random_state=random_state)
+        return x_train,x_test,y_train,y_test
+
+
+def simple_preprocess(image,img_size):
+    # Padded resize
+    img=cv2.resize(image,tuple(img_size),interpolation=cv2.INTER_LINEAR)
+
+    # Normalize RGB
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, HWC to CHW
+    img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+
+    return img
+
+
+class cls_dataset(td.Dataset):
+    def __init__(self,config,split='train'):
+        super().__init__()
+        self.config=config
+        self.split=split
+        self.img_size=config.img_size
+        image_dataset=people_smoking(config.root_path)
+
+        x_train,x_test,y_train,y_test=image_dataset.get_train_val()
+        if split=='train':
+            self.x=x_train
+            self.y=y_train
+        elif split in ['val','test']:
+            self.x=x_test
+            self.y=y_test
+        else:
+            assert False
+
+        self.count=0
+        self.size=len(self.x)
+        assert self.size>0,print(config)
+        assert len(self.x)==len(self.y),'x and y must be the same size'
+        print('{} dataset {} size={}'.format(config.root_path,split,self.size))
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.size
+
+    def __next__(self):
+        if self.count>=self.size:
+            raise StopIteration
+
+        path=self.x[self.count]
+        origin_img=cv2.imread(path)
+        post_img=self.preprocess(origin_img)
+        label=self.y[self.count]
+
+        self.count+=1
+        return {'path':path,
+                'post_img':post_img,
+                'origin_img':origin_img,
+                'label':label}
+
+    def __getitem__(self,idx):
+        self.count=idx
+
+        data=self.__next__()
+        new_data={}
+        new_data['post_img']=data['post_img']
+        new_data['label']=data['label']
+        return new_data
+
+    def preprocess(self,pre_img):
+        return simple_preprocess(pre_img,self.img_size)
 
 class cls_metric():
     def __init__(self):
@@ -46,15 +155,7 @@ class trainer:
                 batch_size=config.batch_size if split=='train' else 1
                 shuffle=True if split=='train' else False
                 drop_last=True if split=='train' else False
-                if config.dataset_name == 'all':
-                    datasets=[]
-                    for name in ['github_cair','CVPRLab','FireSense','VisiFire']:
-                        sub_config=edict(config.copy())
-                        sub_config.dataset_name=name
-                        datasets.append(cls_dataset(finetune_config(sub_config),split))
-                    dataset=td.ConcatDataset(datasets)
-                else:
-                    dataset=cls_dataset(config,split)
+                dataset=cls_dataset(config,split)
 
                 print(split,'dataset size is',len(dataset))
                 self.dataset[split]=td.DataLoader(dataset,
@@ -74,7 +175,7 @@ class trainer:
             self.metric=cls_metric()
             time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
             self.log_dir = os.path.join(config.log_dir, config.model_name,
-                                   config.dataset_name, config.note, time_str)
+                                        config.note, time_str)
 
             self.writer=self.init_writer(config,self.log_dir)
         elif config.app in ['test']:
@@ -195,14 +296,14 @@ class trainer:
             torch.save(self.model,save_model_path)
 
     def test(self,image):
-        assert isinstance(image,np.ndarray)
+        assert isinstance(image,np.ndarray),'input image must be numpy ndarray'
         image=simple_preprocess(image,config.img_size)
         inputs=torch.unsqueeze(torch.from_numpy(image),dim=0).to(self.device)
         outputs=self.model.forward(inputs)
         result=torch.softmax(outputs,dim=1).data.cpu().numpy()
         return np.squeeze(result)
 
-def get_parser():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--app',
                         help='train(train and val) or vis or test(without ground truth)',
@@ -228,112 +329,63 @@ def get_parser():
                         type=int,
                         default=4)
 
-    parser.add_argument('--save_model',
-                        help='save the model or not',
-                        action='store_true')
-
-    parser.add_argument('--load_model_path',
-                        help='model dir or model full path')
-
     parser.add_argument('--note',
-                        default='smoke')
-    return parser
+                        default='one')
 
-def get_default_config():
+    args=parser.parse_args()
     config=edict()
-    config.app='train'
-    config.model_name='vgg11'
-    config.dataset_name='github_cair'
-    config.root_path=os.path.join('dataset','smoke',config.dataset_name)
-    config.img_size=(224,224)
-    config.batch_size=2
-    config.epoch=30
+    config.app=args.app
+    config.model_name=args.model_name
+    config.epoch=args.epoch
+    config.batch_size=args.batch_size
+    config.save_model=True
     config.lr=1e-4
-    config.note='smoke'
-    config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
-    config.save_model=False
-    return config
+    config.img_size=(224,224)
+    config.log_dir=os.path.expanduser('./logs')
+    config.root_path='/media/sdb/ISCAS_Dataset/smoke/people_smoking'
+    config.note='one'
+    config.load_model_path=os.path.join(config.log_dir,config.model_name,config.note)
 
-def load_config(config_path_or_file,get_default_config):
-    """
-    config_path_or_file format:
-        1. None, load default config
-        2. xxx/xxx/xxx.config.txt, load config.txt and merge with default config
-        3. xxx/xxx/weight_file, load config.txt and merge with default config
-        4. xxx/xxx/ load config.txt and merge with default config
-    """
-    if config_path_or_file is None:
-        return get_default_config()
-    elif config_path_or_file.endswith("config.txt"):
-        config_file=config_path_or_file
-    elif os.path.isdir(config_path_or_file):
-        files=glob.glob(os.path.join(config_path_or_file,'**','config.txt'),recursive=True)
-        if len(files)==0:
-            warnings.warn('no config.txt found on directory {}'.format(config_path_or_file))
-            return get_default_config()
-        else:
-            config_file=files[0]
-    elif os.path.isfile(config_path_or_file):
-        config_file=os.path.join(os.path.dirname(config_path_or_file),'config.txt')
-    else:
-        assert False,'unknwon config path format'
-
-    f=open(config_file,'r')
-    l=f.readline()
-    f.close()
-
-    d=yaml.load(l,Loader=yaml.FullLoader)
-    config=edict(d)
-
-    default_cfg=get_default_config()
-    for key in default_cfg.keys():
-        if key not in config.keys():
-            config[key]=default_cfg[key]
-
-    return config
-
-def finetune_config(config):
-    if config.dataset_name=='github_cair':
-        config.root_path=os.path.join('dataset','smoke',config.dataset_name)
-    elif config.dataset_name in ['CVPRLab','FireSense','VisiFire']:
-        config.root_path=os.path.join('dataset','smoke',config.dataset_name+'_img')
-    elif config.dataset_name == 'all':
-        warnings.warn('need finetune config when concat dataset')
-    else:
-        assert False
-    return config
-
-if __name__ == '__main__':
-    parser=get_parser()
-    args = parser.parse_args()
-
-    config=load_config(args.load_model_path,get_default_config)
-    if args.app=='train':
-        sort_keys=sorted(list(config.keys()))
-        for key in sort_keys:
-            if hasattr(args,key):
-                print('{} = {} (default: {})'.format(key,args.__dict__[key],config[key]))
-                config[key]=args.__dict__[key]
-            else:
-                print('{} : (default:{})'.format(key,config[key]))
-
-        for key in args.__dict__.keys():
-            if key not in config.keys():
-                print('{} : unused keys {}'.format(key,args.__dict__[key]))
-    else:
-        config.app=args.app
-        config.load_model_path=args.load_model_path
-
-    config=finetune_config(config)
     t=trainer(config)
-    if args.app=='train':
+
+    if config.app=='train':
         t.train_val()
-    elif args.app=='test':
-        print('start test'+'*'*30)
-        files=glob.glob('dataset/demo/**/*.jpg',recursive=True)
-        print(files)
-        for f in files:
-            img=cv2.imread(f)
-            with torch.no_grad():
+    elif config.app=='test':
+        input_video_path='/media/sdb/ISCAS_Dataset/driver_videos/抽烟3.h264'
+        cap=cv2.VideoCapture(input_video_path)
+        assert cap.isOpened(),'cannot open video {}'.format(input_video_path)
+
+        codec = cv2.VideoWriter_fourcc(*"mp4v")
+        fps=30
+        output_video_path='output.mp4'
+        writer=None
+
+        names=['normal','smoking']
+        while True:
+            flag,img=cap.read()
+            if flag:
+                if writer is None:
+                    height,width=img.shape[0:2]
+                    writer=cv2.VideoWriter(output_video_path,codec,fps,(width,height))
+
                 result=t.test(img)
-            print(f,'%0.2f'%result[1])
+#                print(names[np.argmax(result)])
+                if result[1]>0.9:
+                    text='smoking'
+                    color=(0,255,0)
+                else:
+                    text='normal'
+                    color=(255,0,0)
+
+                print(text)
+
+                fontScale=3
+                cv2.putText(img, text , (50,150), cv2.FONT_HERSHEY_COMPLEX, fontScale, color, 12)
+
+                writer.write(img)
+            else:
+                print('end of video')
+                break
+        writer.release()
+    else:
+        assert False,'unknown app name {}'.format(config.app)

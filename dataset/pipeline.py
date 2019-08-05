@@ -191,7 +191,7 @@ class darknet_pipeline():
             img=cv2.imread(img_file)
             img_h,img_w=img.shape[0:2]
             if width!=img_w or height!=img_h:
-                warnings.warn('bad size for annotation file {}'.format(ann_file))
+                warnings.warn('bad size for annotation file {} and {}'.format(ann_file,img_file))
                 print(height,width,img_h,img_w)
                 height=img_h
                 width=img_w
@@ -210,7 +210,7 @@ class darknet_pipeline():
             x2=int(bndbox.find('xmax').text)
             y2=int(bndbox.find('ymax').text)
 
-            assert width>=x2>x1 and height>=y2>y1,'width={}>={}>{}, height={}>={}>{} in {}'.format(width,x2,x1,height,y2,y1,ann_file)
+            assert width>=x2>x1 and height>=y2>y1,'width={}>={}>{}, height={}>={}>{} in {} for {}'.format(width,x2,x1,height,y2,y1,ann_file,img_file)
 
             xc=(x1+x2)/width/2
             yc=(y1+y2)/height/2
@@ -316,7 +316,7 @@ class darknet_pipeline():
 
         print("run the follow code to train\n")
         print("cd {}".format(self.train_dir))
-        print("python train.py --data {data_file} --cfg {cfg_file} --notest --epoch 30 --nosave --note {note}".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
+        print("python train.py --data {data_file} --cfg {cfg_file} --nosave --note {note} --epoch 500".format(data_file=data_file,cfg_file=cfg_file,note=self.note))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

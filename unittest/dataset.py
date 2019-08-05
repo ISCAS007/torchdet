@@ -2,6 +2,7 @@
 import os
 import unittest
 import torch
+import torchvision
 from model.multi_dataset_model.cls_seg import Config,get_cls_dataloader,get_seg_dataloader
 
 def convertCityscapesIdx(label):
@@ -48,6 +49,12 @@ class TestDataset(unittest.TestCase):
             break
 
         self.assertTrue(True)
+
+    def test_imagenet_2012(self):
+        root=os.path.expanduser('~/cvdataset/imagenet')
+        d=torchvision.datasets.ImageNet(root,download=True,split='train')
+        print('imagenet2012 dataset size',len(d))
+        self.assertTrue(len(d)>0)
 
 if __name__ == '__main__':
     unittest.main()
