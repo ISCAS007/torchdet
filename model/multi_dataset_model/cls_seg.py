@@ -21,6 +21,7 @@ import glob
 import warnings
 import cv2
 from torch import nn
+import pickle
 
 def get_transform(split,crop_size = 480, base_size = 520):
     train = split=='train'
@@ -99,6 +100,14 @@ class SharedClsModel(nn.Module):
         self.layer4_pool=nn.AvgPool2d(2,2)
         self.avgpool=nn.AdaptiveAvgPool2d((1,1))
         self.fc=nn.Linear(512*4,num_class)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self,x):
         x=self.backbone.conv1(x)
@@ -282,14 +291,15 @@ class MultiTrainer:
             assert False
 
         if 'seg' in labels.keys():
-            label=labels['seg']
-            foreground_class_ids = [
-            7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33]
+            if self.config.dataset_name == 'cityscapes':
+                label=labels['seg']
+                foreground_class_ids = [
+                7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33]
 
-            reIndexed_label=torch.zeros_like(label)+255
-            for idx,id in enumerate(foreground_class_ids):
-                reIndexed_label=torch.where(label==id,torch.tensor(idx).to(self.device),reIndexed_label)
-            labels['seg']=reIndexed_label.to(self.device)
+                reIndexed_label=torch.zeros_like(label)+255
+                for idx,id in enumerate(foreground_class_ids):
+                    reIndexed_label=torch.where(label==id,torch.tensor(idx).to(self.device),reIndexed_label)
+                labels['seg']=reIndexed_label.to(self.device)
         return inputs,labels
 
     def get_loss(self,outputs,labels):
@@ -313,9 +323,14 @@ class MultiTrainer:
         tqdm_step = tqdm(dataloader, desc='step', leave=False)
         assert len(dataloader)>0
         for i,(data) in enumerate(tqdm_step):
-
             inputs,labels=self.get_data(data,'train')
             outputs=self.model.forward(inputs)
+
+            if self.config.check_input_output:
+                with open('input_output.pkl',mode='wb') as f:
+                    pickle.dump({'inputs':inputs,'labels':labels,'outputs':outputs},f)
+                assert False
+
             losses=self.get_loss(outputs,labels)
 
             total_loss=0
@@ -431,6 +446,10 @@ class Config:
                             type=int,
                             default=4)
 
+        parser.add_argument('--check_input_output',
+                            help='check model input and output',
+                            action='store_true')
+
         parser.add_argument('--load_model_path',
                         help='model dir or model full path')
 
@@ -452,6 +471,7 @@ class Config:
         config.log_dir=os.path.expanduser('~/tmp/logs/torchdet')
         config.load_model_path=None
         config.save_model=False
+        config.check_input_output=False
         return config
 
     @staticmethod
