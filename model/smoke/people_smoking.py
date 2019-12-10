@@ -14,14 +14,15 @@ from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 import warnings
 import argparse
+from torchvision import transforms
 
 def check_img(img_f):
     try:
         img=cv2.imread(img_f)
         img_size=(224,224)
-        cv2.resize(img,tuple(img_size),interpolation=cv2.INTER_LINEAR)
-    except:
-        warnings.warn('bad image {}'.format(img_f))
+        cv2.resize(img,img_size,interpolation=cv2.INTER_LINEAR)
+    except Exception as e:
+        warnings.warn('bad image {} with exception {}'.format(img_f,e))
         return False
     else:
         if img is None:
@@ -30,10 +31,10 @@ def check_img(img_f):
         else:
             return True
 
-class people_smoking:
+class PosNegClsDataset:
     def __init__(self,root_path):
-        self.pos_files=glob.glob(os.path.join(root_path,'pos','*','*.*'))
-        self.neg_files=glob.glob(os.path.join(root_path,'neg','*','*.*'))
+        self.pos_files=glob.glob(os.path.join(root_path,'pos','**','*.*'),recursive=True)
+        self.neg_files=glob.glob(os.path.join(root_path,'neg','**','*.*'),recursive=True)
 
         img_suffix=('jpg','jpeg','bmp','png')
         self.pos_files=[f for f in self.pos_files if f.lower().endswith(img_suffix) and check_img(f)]
@@ -63,7 +64,6 @@ def simple_preprocess(image,img_size):
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, HWC to CHW
     img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
     img /= 255.0  # 0 - 255 to 0.0 - 1.0
-
     return img
 
 
@@ -73,7 +73,7 @@ class cls_dataset(td.Dataset):
         self.config=config
         self.split=split
         self.img_size=config.img_size
-        image_dataset=people_smoking(config.root_path)
+        image_dataset=PosNegClsDataset(config.root_path)
 
         x_train,x_test,y_train,y_test=image_dataset.get_train_val()
         if split=='train':
@@ -174,7 +174,7 @@ class trainer:
             self.optimizer=torch.optim.Adam(optimizer_params,lr=config.lr)
             self.metric=cls_metric()
             time_str = time.strftime("%Y-%m-%d___%H-%M-%S", time.localtime())
-            self.log_dir = os.path.join(config.log_dir, config.model_name,
+            self.log_dir = os.path.join(config.log_dir, config.model_name, config.dataset_name,
                                         config.note, time_str)
 
             self.writer=self.init_writer(config,self.log_dir)
@@ -224,6 +224,20 @@ class trainer:
         pretrained_dict = {k: v for k, v in load_state_dict.items() if k.find('classifier.6')==-1}
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
+
+        count=0
+        for name,m in model.features.named_children():
+            count+=1
+
+        max_freeze_index=count*self.config.freeze_ratio
+        idx=0
+        for name,m in model.features.named_children():
+            if idx<max_freeze_index:
+                for param in m.parameters():
+                    param.requires_grad = False
+
+            idx+=1
+
         return model
 
     def init_writer(self,config, log_dir):
@@ -314,10 +328,11 @@ if __name__ == '__main__':
                         help='model name',
                         choices=['vgg11','vgg13'],
                         default='vgg11')
+
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['github_cair','CVPRLab','FireSense','VisiFire','all'],
-                        default='github_cair')
+                        choices=['people_smoking','lighter'],
+                        default='lighter')
 
     parser.add_argument('--epoch',
                         help='train epoch',
@@ -329,6 +344,11 @@ if __name__ == '__main__':
                         type=int,
                         default=4)
 
+    parser.add_argument('--freeze_ratio',
+                        help='the freeze ratio for trainning backbone',
+                        type=float,
+                        default=1.0)
+
     parser.add_argument('--note',
                         default='one')
 
@@ -336,15 +356,21 @@ if __name__ == '__main__':
     config=edict()
     config.app=args.app
     config.model_name=args.model_name
+    config.dataset_name=args.dataset_name
     config.epoch=args.epoch
     config.batch_size=args.batch_size
+    assert args.freeze_ratio>=0 and args.freeze_ratio<=1.0
+    config.freeze_ratio=args.freeze_ratio
     config.save_model=True
     config.lr=1e-4
     config.img_size=(224,224)
-    config.log_dir=os.path.expanduser('./logs')
-    config.root_path='/media/sdb/ISCAS_Dataset/smoke/people_smoking'
-    config.note='one'
-    config.load_model_path=os.path.join(config.log_dir,config.model_name,config.note)
+    config.log_dir=os.path.expanduser('~/logs')
+    config.root_path=os.path.join('dataset/smoke',config.dataset_name)
+    config.note=args.note
+    config.load_model_path=os.path.join(config.log_dir,
+                                        config.model_name,
+                                        config.dataset_name,
+                                        config.note)
 
     t=trainer(config)
 
@@ -361,6 +387,7 @@ if __name__ == '__main__':
         writer=None
 
         names=['normal','smoking']
+        last_img=None
         while True:
             flag,img=cap.read()
             if flag:
@@ -379,13 +406,18 @@ if __name__ == '__main__':
 
                 print(text)
 
-                fontScale=3
-                cv2.putText(img, text , (50,150), cv2.FONT_HERSHEY_COMPLEX, fontScale, color, 12)
+                fontScale=max(1,img.shape[1]//448)
+                thickness=max(1,img.shape[1]//112)
+                cv2.putText(img, text , (50,150), cv2.FONT_HERSHEY_COMPLEX, fontScale, color, thickness)
+                # img=np.zeros((224,224,3)); cv2.putText(img, text , (50,150), cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 3); cv2.imwrite('output.jpg',img) ;
 
                 writer.write(img)
+                last_img=img.copy()
             else:
                 print('end of video')
                 break
         writer.release()
+
+        cv2.imwrite('output.jpg',last_img)
     else:
         assert False,'unknown app name {}'.format(config.app)

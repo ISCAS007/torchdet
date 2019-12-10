@@ -9,3 +9,4 @@ dataset/smoke
 model/Detectron
 model/pytorch-retinanet
 model/yolov3
+*.onnx
