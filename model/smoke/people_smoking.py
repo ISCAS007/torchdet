@@ -55,7 +55,6 @@ class PosNegClsDataset:
         x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=test_size,random_state=random_state)
         return x_train,x_test,y_train,y_test
 
-
 def simple_preprocess(image,img_size):
     # Padded resize
     img=cv2.resize(image,tuple(img_size),interpolation=cv2.INTER_LINEAR)
@@ -331,8 +330,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['people_smoking','lighter'],
-                        default='lighter')
+                        choices=['fire','smoking'],
+                        default='fire')
 
     parser.add_argument('--epoch',
                         help='train epoch',

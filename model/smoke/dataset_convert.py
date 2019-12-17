@@ -14,7 +14,16 @@ import warnings
 
 from easydict import EasyDict as edict
 
+
+def get_img_files(root_path,img_suffix):
+    files=glob.glob(os.path.join(root_path,'**','*.*'),recursive=True)
+    img_files=[f for f in files if f.lower().endswith(img_suffix)]
+
+    print(root_path,len(img_files))
+    return img_files
+
 def convert_dataset_to_txt(config):
+    img_suffix=('jpg','png','jpeg','bmp')
     if config.dataset_name=='BowFire':
         # fire, not_fire, smoke, normal
         # no training set for smoke, and smoke image is very small
@@ -59,8 +68,10 @@ def convert_dataset_to_txt(config):
 
     elif config.dataset_name=='dunnings':
         config.root_path='dataset/smoke/dunnings/fire-dataset-dunnings/images-224x224'
-        img_files=glob.glob(os.path.join(config.root_path,'train','*','*.png'))
-        img_files+=glob.glob(os.path.join(config.root_path,'test','*','*.png'))
+
+        img_files=[]
+        for split in ['train','test']:
+            img_files+=get_img_files(os.path.join(config.root_path,split),img_suffix)
 
         writers={}
         for split in ['train','test']:
@@ -91,20 +102,13 @@ def convert_dataset_to_txt(config):
             for label in ['fire','normal']:
                 writers[split+label].close()
     elif config.dataset_name=='kaggle_cctv':
-        config.root_path='dataset/smoke/kaggle/cctv'
-
-        # fire-and-smoke, fire-cctv is the same dataset with fire-and-smoke
-        img_suffix=('jpg','png','jpeg')
-        files=glob.glob(os.path.join(config.root_path,'data/img_data','**','*.*'),recursive=True)
-        img_files=[f for f in files if f.endswith(img_suffix)]
-
-        print(len(img_files))
+        config.root_path='dataset/smoke/kaggle/cctv/data/img_data'
+        img_files=get_img_files(config.root_path,img_suffix)
 
         writers={}
         for split in ['train','test']:
             for label in ['fire','normal','smoke']:
                 txt_path=os.path.join(config.root_path,label+'_'+split+'.txt')
-                print(txt_path)
                 writers[split+label]=open(txt_path,'w')
 
         for file in img_files:
@@ -134,11 +138,9 @@ def convert_dataset_to_txt(config):
 
     elif config.dataset_name=='kaggle_fire_detection':
         config.root_path='dataset/smoke/kaggle/Fire-Detection'
-
+        img_files=get_img_files(config.root_path,img_suffix)
         # fire-detection, not split with train and test
-        img_suffix=('jpg','png','jpeg')
-        files=glob.glob(os.path.join(config.root_path,'**','*.*'),recursive=True)
-        img_files=[f for f in files if f.endswith(img_suffix)]
+
 
         writers={}
         split='test'
@@ -158,6 +160,88 @@ def convert_dataset_to_txt(config):
 
         for label in ['fire','normal']:
             writers[split+label].close()
+    elif config.dataset_name in ['CVPRLab_img']:
+        config.root_path=os.path.join('dataset/smoke',config.dataset_name)
+        img_files=get_img_files(config.root_path,img_suffix)
+
+        names=['fire','normal','smoke']
+        writers={}
+        split='train'
+        for label in names:
+            txt_path=os.path.join(config.root_path,label+'_'+split+'.txt')
+            writers[split+label]=open(txt_path,'w')
+
+        for file in img_files:
+            base_name=os.path.basename(file)
+            for label in names:
+                if base_name.find(label)!=-1:
+                    writers[split+label].write(file+'\n')
+
+        for label in names:
+            writers[split+label].close()
+    elif config.dataset_name in ['FireSense_img']:
+        config.root_path=os.path.join('dataset/smoke',config.dataset_name)
+        img_files=get_img_files(config.root_path,img_suffix)
+
+        names=['fire','normal','smoke']
+        writers={}
+        split='train'
+        for label in names:
+            txt_path=os.path.join(config.root_path,label+'_'+split+'.txt')
+            writers[split+label]=open(txt_path,'w')
+
+        for file in img_files:
+            base_name=os.path.relpath(file,start=config.root_path)
+            dir_name=os.path.dirname(base_name)
+            for label in names:
+                if dir_name.find(label)!=-1 and dir_name.find('pos')!=-1:
+                    writers[split+label].write(file+'\n')
+
+                if dir_name.find('neg')!=-1:
+                    writers[split+'normal'].write(file+'\n')
+
+        for label in names:
+            writers[split+label].close()
+    elif config.dataset_name in ['github_cair']:
+        config.root_path=os.path.join('dataset/smoke',config.dataset_name)
+        img_files=get_img_files(config.root_path,img_suffix)
+
+        names=['fire','normal']
+        writers={}
+        split='train'
+        for label in names:
+            txt_path=os.path.join(config.root_path,label+'_'+split+'.txt')
+            writers[split+label]=open(txt_path,'w')
+
+        for file in img_files:
+            base_name=os.path.relpath(file,start=config.root_path)
+            dir_name=os.path.dirname(base_name).lower()
+            for label in names:
+                if dir_name.find(label)!=-1:
+                    writers[split+label].write(file+'\n')
+
+        for label in names:
+            writers[split+label].close()
+    elif config.dataset_name in ['VisiFire_img']:
+        config.root_path=os.path.join('dataset/smoke',config.dataset_name)
+        img_files=get_img_files(config.root_path,img_suffix)
+
+        names=['fire','smoke']
+        writers={}
+        split='train'
+        for label in names:
+            txt_path=os.path.join(config.root_path,label+'_'+split+'.txt')
+            writers[split+label]=open(txt_path,'w')
+
+        for file in img_files:
+            base_name=os.path.relpath(file,start=config.root_path)
+            dir_name=os.path.dirname(base_name).lower()
+            for label in names:
+                if dir_name.find(label)!=-1:
+                    writers[split+label].write(file+'\n')
+
+        for label in names:
+            writers[split+label].close()
     else:
         assert False
 
@@ -165,6 +249,9 @@ def convert_dataset_to_txt(config):
 
 if __name__ == '__main__':
     config=edict()
-    config.dataset_name='kaggle_cctv'
 
-    convert_dataset_to_txt(config)
+    for dataset in ['github_cair','FireSense_img','CVPRLab_img',
+                    'kaggle_fire_detection','kaggle_cctv','dunnings','BowFire',
+                    'VisiFire_img']:
+        config.dataset_name=dataset
+        convert_dataset_to_txt(config)
