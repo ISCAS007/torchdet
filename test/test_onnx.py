@@ -9,6 +9,7 @@ import onnxruntime
 import cv2
 from model.smoke.dataset import simple_preprocess
 from scipy.special import softmax
+from model.smoke.utils import to_onnx
 import numpy as np
 if __name__ == '__main__':
     model_files=glob.glob(os.path.join('/home/yzbx/logs/vgg11/lighter/**/*.pt'),recursive=True)
@@ -22,21 +23,7 @@ if __name__ == '__main__':
     device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     for idx,model_path in enumerate(model_files):
         model=get_model(model_name,model_path)
-        device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        rand_img=torch.rand((1,3,224,224)).to(device)
-        outputs=model.forward(rand_img)
-
-        torch.onnx.export(model,
-                          rand_img,
-                          str(idx)+'.onnx',
-                          export_params=True,
-                          opset_version=10,
-                          do_constant_folding=True,
-                          verbose=True,
-                          input_names=['input'],
-                          output_names=['output'],
-                          dynamic_axes={'input':{0:'batch_size'},
-                                        'output':{0:'batch_size'}})
+        to_onnx(model,str(idx)+'.onnx')
 
     onnx_model=onnx.load('0.onnx')
     onnx.checker.check_model(onnx_model)

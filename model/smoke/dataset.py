@@ -5,6 +5,53 @@ import os
 import glob
 from sklearn.model_selection import train_test_split
 import numpy as np
+import json
+
+class JsonClsDataset:
+    def __init__(self,json_file,names):
+        with open(json_file,'r') as f:
+            cfg=json.load(f)
+
+        # 0 stands normal, 1 for fire/smoking, ...
+        assert names[0]=='normal',names
+        self.names=names
+
+        self.pos_files=[]
+        self.neg_files=[]
+
+        self.img_files={}
+        for name in names:
+            for split in ['train','test']:
+                key=name+'_'+split
+                self.img_files[key]=[]
+                for f in cfg[name]:
+                    if os.path.basename(f).find(split)!=-1:
+                        root_path=os.path.dirname(f)
+                        with open(f,'r') as txt_file:
+                            for line in txt_file.readlines():
+                                line=line.strip()
+                                if line !='':
+                                    if os.path.exists(line):
+                                        self.img_files[key].append(line)
+                                    else:
+                                        img_path=os.path.join(root_path,line)
+                                        assert os.path.exists(img_path),img_path
+
+                                        self.img_files[key].append(img_path)
+
+                print(name,split,len(self.img_files[key]))
+
+    def get_train_val(self,test_size=0.33,random_state=25):
+        x=[]
+        y=[]
+        for idx,name in enumerate(self.names):
+            for split in ['train','test']:
+                key=name+'_'+split
+                x+=self.img_files[key]
+                y+=[idx]*len(self.img_files[key])
+
+        x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=test_size,random_state=random_state)
+        return x_train,x_test,y_train,y_test
 
 class github_cair:
     def __init__(self,rootpath):

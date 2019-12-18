@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-
+"""
+name should be smoke, not smoking
+normal should be first
+"""
 import cv2
 import torch.utils.data as td
 import os
@@ -15,6 +18,7 @@ from tensorboardX import SummaryWriter
 import warnings
 import argparse
 from torchvision import transforms
+from model.smoke.dataset import JsonClsDataset
 
 def check_img(img_f):
     try:
@@ -32,7 +36,7 @@ def check_img(img_f):
             return True
 
 class PosNegClsDataset:
-    def __init__(self,root_path):
+    def __init__(self,root_path,names):
         self.pos_files=glob.glob(os.path.join(root_path,'pos','**','*.*'),recursive=True)
         self.neg_files=glob.glob(os.path.join(root_path,'neg','**','*.*'),recursive=True)
 
@@ -45,7 +49,7 @@ class PosNegClsDataset:
         assert len(self.pos_files)>0,'positive sample images cannot be empty'
         assert len(self.neg_files)>0,'negative sample images cannot be empty'
 
-        self.names=['normal','smoking']
+        self.names=names
 
     def get_train_val(self,test_size=0.33,random_state=25):
         x=self.pos_files+self.neg_files
@@ -72,8 +76,29 @@ class cls_dataset(td.Dataset):
         self.config=config
         self.split=split
         self.img_size=config.img_size
-        image_dataset=PosNegClsDataset(config.root_path)
+        if config.dataset_name in ['people_smoking','lighter']:
+            root_path=os.path.join('dataset/smoke',config.dataset_name)
 
+            if config.dataset_name == 'people_smoking':
+                names=['normal','people smoking']
+            else:
+                names=['normal','fire']
+
+            image_dataset=PosNegClsDataset(root_path,names)
+        elif config.dataset_name in ['fire','smoke','fire_smoke']:
+            json_file=os.path.join('dataset/smoke','dataset.json')
+            if config.dataset_name == 'fire':
+                names=['normal','fire']
+            elif config.dataset_name == 'smoke':
+                names=['normal','smoke']
+            else:
+                names=['normal','fire','smoke']
+
+            image_dataset=JsonClsDataset(json_file=json_file,names=names)
+        else:
+            assert False,config.datsaet_name
+
+        self.names=names
         x_train,x_test,y_train,y_test=image_dataset.get_train_val()
         if split=='train':
             self.x=x_train
@@ -88,7 +113,7 @@ class cls_dataset(td.Dataset):
         self.size=len(self.x)
         assert self.size>0,print(config)
         assert len(self.x)==len(self.y),'x and y must be the same size'
-        print('{} dataset {} size={}'.format(config.root_path,split,self.size))
+        print('{} dataset {} size={}'.format(config.dataset_name,split,self.size))
 
     def __iter__(self):
         return self
@@ -155,6 +180,7 @@ class trainer:
                 shuffle=True if split=='train' else False
                 drop_last=True if split=='train' else False
                 dataset=cls_dataset(config,split)
+                self.num_class=len(dataset.names)
 
                 print(split,'dataset size is',len(dataset))
                 self.dataset[split]=td.DataLoader(dataset,
@@ -216,7 +242,7 @@ class trainer:
         from torchvision.models import vgg11,vgg13
         import torch.utils.model_zoo as model_zoo
 
-        model=locals()[self.config.model_name](pretrained=False,num_classes=2)
+        model=locals()[self.config.model_name](pretrained=False,num_classes=self.num_class)
 
         load_state_dict=model_zoo.load_url(model_urls[self.config.model_name])
         model_dict = model.state_dict()
@@ -330,7 +356,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name',
                         help='dataset name',
-                        choices=['fire','smoking'],
+                        choices=['fire','smoke','lighter','people_smoking','fire_smoke'],
                         default='fire')
 
     parser.add_argument('--epoch',
@@ -364,7 +390,6 @@ if __name__ == '__main__':
     config.lr=1e-4
     config.img_size=(224,224)
     config.log_dir=os.path.expanduser('~/logs')
-    config.root_path=os.path.join('dataset/smoke',config.dataset_name)
     config.note=args.note
     config.load_model_path=os.path.join(config.log_dir,
                                         config.model_name,
@@ -385,7 +410,7 @@ if __name__ == '__main__':
         output_video_path='output.mp4'
         writer=None
 
-        names=['normal','smoking']
+        names=['normal','smoke']
         last_img=None
         while True:
             flag,img=cap.read()

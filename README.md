@@ -34,6 +34,18 @@ python tools/infer_simple.py \
 ## segmentation reference
 - https://github.com/lingtengqiu/Deeperlab-pytorch
 
+## fire detection
+- dataset_convert.py: convert dataset to txt format
+- json_config_generate.py: collect txt dataset and generate json dataset config
+- dataset.JsonClsDataset: use json dataset config to generate dataset
+- people_smoking.PosNegClsDataset: binary classification dataset for dataset lighter and people_smoking
+- people_smoking.py: training code
+- test/test_onnx.py: test for onnx fire detection model
+- model/smoke/test.py: test for pytorch fire detection model
+```
+python model/smoke/people_smoking.py --dataset_name fire
+```
+
 ## dataset
 
 | dataset name | image | object | category |
@@ -45,7 +57,7 @@ python tools/infer_simple.py \
 | OID-2018 | 1910k | 15440k | 600 |
 
 ## requirement
-- model/smoke/smoke_cls.py
+- model/smoke/people_smoking.py
 - model/boundary.py
 - model/overlap.py
 
