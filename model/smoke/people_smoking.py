@@ -389,7 +389,7 @@ if __name__ == '__main__':
     config.save_model=True
     config.lr=1e-4
     config.img_size=(224,224)
-    config.log_dir=os.path.expanduser('~/logs')
+    config.log_dir=os.path.expanduser('~/tmp/logs')
     config.note=args.note
     config.load_model_path=os.path.join(config.log_dir,
                                         config.model_name,
