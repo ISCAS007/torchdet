@@ -11,8 +11,12 @@ from model.smoke.dataset import simple_preprocess
 from scipy.special import softmax
 from model.smoke.utils import to_onnx
 import numpy as np
+import sys
+
 if __name__ == '__main__':
-    model_files=glob.glob(os.path.join('/home/yzbx/logs/vgg11/lighter/**/*.pt'),recursive=True)
+    note='json'
+    target='smoke'
+    model_files=glob.glob(os.path.join('/home/yzbx/logs/vgg11/{}/{}/**/*.pt'.format(target,note)),recursive=True)
 
     assert len(model_files)>0
     model_files.sort()
@@ -23,12 +27,12 @@ if __name__ == '__main__':
     device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     for idx,model_path in enumerate(model_files):
         model=get_model(model_name,model_path)
-        to_onnx(model,str(idx)+'.onnx')
+        to_onnx(model,note+str(idx)+'.onnx')
 
-    onnx_model=onnx.load('0.onnx')
+    onnx_model=onnx.load(note+'0.onnx')
     onnx.checker.check_model(onnx_model)
 
-    ort_session=onnxruntime.InferenceSession('0.onnx')
+    ort_session=onnxruntime.InferenceSession(note+'0.onnx')
 
     def to_numpy(tensor):
         return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
@@ -38,29 +42,29 @@ if __name__ == '__main__':
 
 #    print(ort_outs)
 
-    cap=cv2.VideoCapture('dataset/smoke/FireSense/fire/pos/posVideo10.869.avi')
+    if len(sys.argv)>1:
+        video=sys.argv[1]
+    else:
+        if target=='fire':
+            video='dataset/smoke/FireSense/fire/pos/posVideo10.869.avi'
+        else:
+            video='dataset/smoke/FireSense/smoke/pos/testpos01.817.avi'
+
+    cap=cv2.VideoCapture(video)
 
     if not cap.isOpened():
-        assert False
+        assert False,video
 
-    names=['normal','fire']
+    names=['normal',target]
     while True:
         flag,frame=cap.read()
         if not flag:
             break
 
-        print('frame mean',np.mean(frame,axis=(0,1)))
-
-        np_mean=np.mean(simple_preprocess(frame,(224,224)),axis=(1,2))
-        print('np mean 3d',np_mean)
-
         img=np.expand_dims(simple_preprocess(frame,(224,224)),0)
-        np_mean=np.mean(img,axis=(2,3))
-        print('np_mean 4d',np_mean)
+
         # pytorch result
         pytorch_input=torch.from_numpy(img).to(device)
-        mean_input=torch.mean(pytorch_input,dim=[2,3])
-        print('torch mean',mean_input)
         pytorch_output=pytorch_model.forward(pytorch_input)
         pytorch_result=np.squeeze(torch.softmax(pytorch_output,dim=1).data.cpu().numpy())
 
@@ -82,7 +86,7 @@ if __name__ == '__main__':
         thickness=max(1,frame.shape[1]//112)
         frame=cv2.putText(frame, text+' %0.2f'%(max(result)) , (50,50), cv2.FONT_HERSHEY_COMPLEX, fontScale, color, thickness)
 
-        cv2.imshow('fire detection',frame)
+        cv2.imshow('{} detection'.format(target),frame)
         key=cv2.waitKey(30)
         if key==ord('q'):
             break
