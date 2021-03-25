@@ -5,4 +5,4 @@ opencv_python==4.1.0.25
 torch==1.1.0
 scikit_learn==0.21.2
 tensorboardX==1.7
-PyYAML==5.1.1
+PyYAML==5.4
